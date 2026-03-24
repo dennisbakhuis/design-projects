@@ -294,10 +294,8 @@ def make_workbench():
     slat_wall_width = slat_wall_x_right - slat_wall_x_left
     slat_wall_center_x = (slat_wall_x_right + slat_wall_x_left) / 2
 
-    # Y position: front edge of frontmost tank row minus 5mm clearance
-    ty_row0 = wall_back_y - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2
-    ty_row_last = ty_row0 - (TWINSET_ROWS - 1) * row_spacing_val
-    slat_wall_y = ty_row_last - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2 - 5 - SLAT_DEPTH / 2
+    # Y position: flush with the main table front face
+    slat_wall_y = -TABLE_WIDTH / 2 - SLAT_DEPTH / 2
 
     slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
 
