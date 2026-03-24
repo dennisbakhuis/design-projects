@@ -37,7 +37,7 @@ SLAT_DEPTH = 15  # depth of each slat (Y direction), mm
 SLAT_GAP = 10  # gap between slats, mm
 SLAT_BOTTOM_Z = 10  # clearance above floor, mm
 SLAT_TOP_CLEARANCE = 10  # clearance below tabletop underside, mm
-SLAT_WALL_INSET = 15     # how far inside the leg front face the slat wall sits, mm
+SLAT_WALL_INSET = 10     # how far inside the leg front face the slat wall sits, mm
 
 EXT_DEPTH = 200
 EXT_LENGTH = TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET + 30
@@ -309,17 +309,19 @@ def make_workbench():
 
     # ── Twinset front mounting rails (slats attach to these) ─────────────
     # Positioned just behind the slat wall back face, spanning the same X extent.
-    # Mounting rails anchored at the extension front legs (replaces the removed ext_front stretcher/apron)
+    # Mounting rails flush with the inner (back) face of the extension front legs.
+    # Stretcher back face = leg back face → no clipping with slat wall.
+    rail_y = ext_front_leg_y + LEG_DEPTH / 2 - STRETCHER_WIDTH / 2
     assy.add(
         box(slat_wall_width, STRETCHER_WIDTH, STRETCHER_HEIGHT),
         name="twinset_front_rail_bottom",
-        loc=loc(slat_wall_center_x, ext_front_leg_y, STRETCHER_Z),
+        loc=loc(slat_wall_center_x, rail_y, STRETCHER_Z),
         color=Color("sienna"),
     )
     assy.add(
         box(slat_wall_width, APRON_THICKNESS, APRON_HEIGHT),
         name="twinset_front_rail_top",
-        loc=loc(slat_wall_center_x, ext_front_leg_y, APRON_Z),
+        loc=loc(slat_wall_center_x, rail_y, APRON_Z),
         color=Color("saddlebrown"),
     )
 
