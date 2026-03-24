@@ -288,9 +288,9 @@ def make_workbench():
     column_spacing_val = TANK_DIAMETER + 30  # must match the twinset loop value
     row_spacing_val = CYLINDER_SPACING + TANK_DIAMETER + 30
 
-    # X extent: flush with outer faces of the bounding legs
-    slat_wall_x_right = right_x + LEG_WIDTH / 2          # outer face of wall_back_right leg
-    slat_wall_x_left = ext_left_leg_x - LEG_WIDTH / 2    # outer face of ext_back_left leg
+    # X extent: between the inner faces of the extension legs (no clipping)
+    slat_wall_x_right = right_x - LEG_WIDTH / 2          # inner face of ext_front_right leg
+    slat_wall_x_left = ext_left_leg_x + LEG_WIDTH / 2    # inner face of ext_front_left leg
     slat_wall_width = slat_wall_x_right - slat_wall_x_left
     slat_wall_center_x = (slat_wall_x_right + slat_wall_x_left) / 2
 
