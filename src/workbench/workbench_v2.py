@@ -258,7 +258,7 @@ def make_workbench():
 
     for row in range(TWINSET_ROWS):
         for col in range(TWINSET_COLS):
-            tx = right_x - col * column_spacing
+            tx = (right_x + LEG_WIDTH / 2 - 10 - TANK_DIAMETER / 2) - col * column_spacing
             ty = (back_y - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2) - row * row_spacing
             assy.add(
                 make_d12_twinset(),
