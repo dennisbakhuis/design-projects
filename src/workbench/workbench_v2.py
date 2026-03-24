@@ -143,40 +143,13 @@ def loc(x, y, z):
     return Location(Vector(x, y, z))
 
 
-def make_slat_wall(total_width: float, height: float) -> cq.Assembly:
-    """Build a slatted wood wall panel.
-
-    Slats are vertical (Z-axis), arranged along X with SLAT_GAP between them.
-    The panel is centered at the origin in X, starts at Z=0.
-
-    Parameters
-    ----------
-    total_width : float
-        Total X span of the panel (outer face to outer face).
-    height : float
-        Height of each slat (Z).
-
-    Returns
-    -------
-    cq.Assembly
-        Assembly of individual slat boxes.
-    """
-    assy = Assembly(name="slat_wall")
-    pitch = SLAT_WIDTH + SLAT_GAP  # center-to-center spacing
+def slat_wall_positions(total_width: float) -> list[float]:
+    """Return X offsets (relative to wall center) for each slat center."""
+    pitch = SLAT_WIDTH + SLAT_GAP
     n_slats = int(total_width // pitch)
-    # Centre the slat array within total_width
-    array_width = n_slats * pitch - SLAT_GAP  # total span of slat faces
+    array_width = n_slats * pitch - SLAT_GAP
     x_start = -array_width / 2 + SLAT_WIDTH / 2
-
-    for i in range(n_slats):
-        x = x_start + i * pitch
-        assy.add(
-            cq.Workplane("XY").box(SLAT_WIDTH, SLAT_DEPTH, height),
-            name=f"slat_{i}",
-            loc=loc(x, 0, height / 2),
-            color=Color("burlywood"),
-        )
-    return assy
+    return [x_start + i * pitch for i in range(n_slats)]
 
 
 # ── Stretcher & apron specs ──────────────────────────────────────────────────
@@ -328,11 +301,13 @@ def make_workbench():
 
     slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
 
-    assy.add(
-        make_slat_wall(slat_wall_width, slat_height),
-        name="twinset_slat_wall",
-        loc=loc(slat_wall_center_x, slat_wall_y, SLAT_BOTTOM_Z),
-    )
+    for i, x_offset in enumerate(slat_wall_positions(slat_wall_width)):
+        assy.add(
+            box(SLAT_WIDTH, SLAT_DEPTH, slat_height),
+            name=f"slat_{i}",
+            loc=loc(slat_wall_center_x + x_offset, slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
+            color=Color("burlywood"),
+        )
 
     return assy
 
