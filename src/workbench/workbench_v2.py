@@ -37,6 +37,7 @@ SLAT_DEPTH = 15  # depth of each slat (Y direction), mm
 SLAT_GAP = 10  # gap between slats, mm
 SLAT_BOTTOM_Z = 10  # clearance above floor, mm
 SLAT_TOP_CLEARANCE = 10  # clearance below tabletop underside, mm
+SLAT_WALL_INSET = 15     # how far inside the leg front face the slat wall sits, mm
 
 EXT_DEPTH = 200
 EXT_LENGTH = TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET + 30
@@ -294,10 +295,9 @@ def make_workbench():
     slat_wall_width = slat_wall_x_right - slat_wall_x_left
     slat_wall_center_x = (slat_wall_x_right + slat_wall_x_left) / 2
 
-    # Y position: 950mm from the back wall = ext_front_y + STRETCHER_INSET
-    # Table is 800mm (main) + 200mm (extension) = 1000mm total depth.
-    # Slat front face at 1000 - 50 = 950mm from wall = ext_front_y + STRETCHER_INSET
-    slat_wall_y = ext_front_y + STRETCHER_INSET + SLAT_DEPTH / 2
+    # Y position: slightly inside the extension leg front face
+    # Leg front face is at ext_front_y + STRETCHER_INSET; slat sits SLAT_WALL_INSET mm behind it
+    slat_wall_y = ext_front_y + STRETCHER_INSET + SLAT_WALL_INSET + SLAT_DEPTH / 2
 
     slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
 
@@ -308,6 +308,23 @@ def make_workbench():
             loc=loc(slat_wall_center_x + x_offset, slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
             color=Color("burlywood"),
         )
+
+    # ── Twinset front mounting rails (slats attach to these) ─────────────
+    # Positioned just behind the slat wall back face, spanning the same X extent.
+    rail_y = slat_wall_y + SLAT_DEPTH / 2 + STRETCHER_WIDTH / 2
+
+    assy.add(
+        box(slat_wall_width, STRETCHER_WIDTH, STRETCHER_HEIGHT),
+        name="twinset_front_rail_bottom",
+        loc=loc(slat_wall_center_x, rail_y, STRETCHER_Z),
+        color=Color("sienna"),
+    )
+    assy.add(
+        box(slat_wall_width, APRON_THICKNESS, APRON_HEIGHT),
+        name="twinset_front_rail_top",
+        loc=loc(slat_wall_center_x, rail_y, APRON_Z),
+        color=Color("saddlebrown"),
+    )
 
     return assy
 
