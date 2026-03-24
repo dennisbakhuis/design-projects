@@ -31,6 +31,13 @@ APRON_THICKNESS = STRETCHER_WIDTH  # 50 mm, same as stretcher width
 TWINSET_COLS = 3
 TWINSET_ROWS = 2
 
+# ── Twinset front slat wall ───────────────────────────────────────────────
+SLAT_WIDTH = 20      # face width of each slat (X direction), mm
+SLAT_DEPTH = 15      # depth of each slat (Y direction), mm
+SLAT_GAP = 10        # gap between slats, mm
+SLAT_BOTTOM_Z = 10   # clearance above floor, mm
+SLAT_TOP_CLEARANCE = 10  # clearance below tabletop underside, mm
+
 EXT_DEPTH = 200
 EXT_LENGTH = 750  # TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET
 FILLET_RADIUS = 100
@@ -134,6 +141,42 @@ def make_wall_beam():
 
 def loc(x, y, z):
     return Location(Vector(x, y, z))
+
+
+def make_slat_wall(total_width: float, height: float) -> cq.Assembly:
+    """Build a slatted wood wall panel.
+
+    Slats are vertical (Z-axis), arranged along X with SLAT_GAP between them.
+    The panel is centered at the origin in X, starts at Z=0.
+
+    Parameters
+    ----------
+    total_width : float
+        Total X span of the panel (outer face to outer face).
+    height : float
+        Height of each slat (Z).
+
+    Returns
+    -------
+    cq.Assembly
+        Assembly of individual slat boxes.
+    """
+    assy = Assembly(name="slat_wall")
+    pitch = SLAT_WIDTH + SLAT_GAP  # center-to-center spacing
+    n_slats = int(total_width // pitch)
+    # Centre the slat array within total_width
+    array_width = n_slats * pitch - SLAT_GAP  # total span of slat faces
+    x_start = -array_width / 2 + SLAT_WIDTH / 2
+
+    for i in range(n_slats):
+        x = x_start + i * pitch
+        assy.add(
+            cq.Workplane("XY").box(SLAT_WIDTH, SLAT_DEPTH, height),
+            name=f"slat_{i}",
+            loc=loc(x, 0, height / 2),
+            color=Color("burlywood"),
+        )
+    return assy
 
 
 # ── Stretcher & apron specs ──────────────────────────────────────────────────
@@ -265,6 +308,31 @@ def make_workbench():
                 name=f"d12_twinset_{row}_{col}",
                 loc=Location(Vector(tx, ty, 0), Vector(0, 0, 1), 90),
             )
+
+    # ── Twinset front slat wall ───────────────────────────────────────────
+    column_spacing_val = TANK_DIAMETER + 30  # must match the twinset loop value
+    row_spacing_val = CYLINDER_SPACING + TANK_DIAMETER + 30
+
+    # X extent of twinset storage
+    slat_wall_x_right = right_x + LEG_WIDTH / 2
+    tx_col0 = right_x + LEG_WIDTH / 2 - 10 - TANK_DIAMETER / 2
+    tx_col_last = tx_col0 - (TWINSET_COLS - 1) * column_spacing_val
+    slat_wall_x_left = tx_col_last - TANK_DIAMETER / 2
+    slat_wall_width = slat_wall_x_right - slat_wall_x_left
+    slat_wall_center_x = (slat_wall_x_right + slat_wall_x_left) / 2
+
+    # Y position: front edge of frontmost tank row minus 5mm clearance
+    ty_row0 = wall_back_y - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2
+    ty_row_last = ty_row0 - (TWINSET_ROWS - 1) * row_spacing_val
+    slat_wall_y = ty_row_last - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2 - 5 - SLAT_DEPTH / 2
+
+    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
+
+    assy.add(
+        make_slat_wall(slat_wall_width, slat_height),
+        name="twinset_slat_wall",
+        loc=loc(slat_wall_center_x, slat_wall_y, SLAT_BOTTOM_Z),
+    )
 
     return assy
 
