@@ -27,21 +27,26 @@ STRETCHER_Z = 150
 APRON_HEIGHT = 120
 APRON_THICKNESS = 30
 
-TANK_SLOT = 200
-TANK_ROWS_X = 3
-TANK_MARGIN = 50
+# D12 twinset arrangement: 3 columns × 2 rows = 6 twinsets / 12 tanks
+TWINSET_COLS = 3
+TWINSET_ROWS = 2
 
 EXT_DEPTH = 200
-EXT_LENGTH = TANK_ROWS_X * (TANK_SLOT + TANK_MARGIN) - TANK_MARGIN + STRETCHER_INSET
+EXT_LENGTH = 750  # TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET
 FILLET_RADIUS = 100
+
+# Wall beam parameters (mounts flush against the wall at back of table)
+WALL_BEAM_WIDTH = 120
+WALL_BEAM_HEIGHT = 80
 
 OUTPUT_DIR = Path(__file__).parent
 
 # ── Main table leg positions ─────────────────────────────────────────────────
 #
-# The main table is a rectangle centered at the origin. Three legs support it
-# (front-left, back-left, back-right). The front-right corner has no leg
-# because the extension meets the table there.
+# The main table is a rectangle centered at the origin. One leg supports
+# the front-left corner. The back is supported by a wall beam instead of
+# legs. The front-right corner has no leg because the extension meets the
+# table there.
 
 leg_inset_x = STRETCHER_INSET + LEG_WIDTH / 2
 leg_inset_y = STRETCHER_INSET + LEG_DEPTH / 2
@@ -53,8 +58,6 @@ back_y = TABLE_WIDTH / 2 - leg_inset_y
 
 main_leg_positions = [
     ("front_left", left_x, front_y),
-    ("back_left", left_x, back_y),
-    ("back_right", right_x, back_y),
 ]
 
 # ── Extension leg positions ──────────────────────────────────────────────────
@@ -115,6 +118,11 @@ def make_tabletop():
         .edges(cq.selectors.NearestToPointSelector(inside_corner))
         .fillet(FILLET_RADIUS)
     )
+
+
+def make_wall_beam():
+    """Create the wall-mounted support beam that replaces the two back legs."""
+    return cq.Workplane("XY").box(TABLE_LENGTH, WALL_BEAM_WIDTH, WALL_BEAM_HEIGHT)
 
 
 def loc(x, y, z):
@@ -209,20 +217,29 @@ def make_workbench():
             color=Color("saddlebrown"),
         )
 
-    # ── D12 twinsets under right side (4 tanks = 2 twinsets in Y) ────────
-    twinset_count = 2
-    twinset_spacing = TANK_DIAMETER + 30
-    twinset_half_width = (CYLINDER_SPACING + TANK_DIAMETER) / 2
-    twinset_x = right_x + LEG_WIDTH / 2 - twinset_half_width
-    back_twinset_y = back_y - LEG_DEPTH / 2 - TANK_DIAMETER / 2
+    # ── Wall beam (replaces back_left and back_right legs) ────────────────
+    assy.add(
+        make_wall_beam(),
+        name="wall_beam",
+        loc=loc(0, back_y, APRON_Z),
+        color=Color(0.4, 0.4, 0.4),
+    )
 
-    for i in range(twinset_count):
-        ty = back_twinset_y - i * twinset_spacing
-        assy.add(
-            make_d12_twinset(),
-            name=f"d12_twinset_{i}",
-            loc=loc(twinset_x, ty, 0),
-        )
+    # ── D12 twinsets: 3 columns × 2 rows = 6 twinsets / 12 tanks ─────────
+    # Twinsets are rotated 90° around Z so cylinders are side-by-side in Y.
+    # Anchored to the back-right corner; back row is closest to the wall.
+    column_spacing = TANK_DIAMETER + 30       # 202 mm per column
+    row_spacing = CYLINDER_SPACING + 30       # 233 mm per row
+
+    for row in range(TWINSET_ROWS):
+        for col in range(TWINSET_COLS):
+            tx = right_x - col * column_spacing
+            ty = (back_y - TANK_DIAMETER / 2) - row * row_spacing
+            assy.add(
+                make_d12_twinset(),
+                name=f"d12_twinset_{row}_{col}",
+                loc=Location(Vector(tx, ty, 0), Vector(0, 0, 1), 90),
+            )
 
     return assy
 
