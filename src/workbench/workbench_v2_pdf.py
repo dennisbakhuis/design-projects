@@ -7,6 +7,7 @@ Run with:
 Outputs: src/workbench/workbench_v2_construction.pdf
 """
 
+import math
 import sys
 import tempfile
 from pathlib import Path
@@ -94,6 +95,51 @@ def place_drawing(c, rl_drawing, area_x, area_y, area_w, area_h, label=""):
         c.setFont("Helvetica-Bold", 8)
         c.setFillColor(colors.black)
         c.drawCentredString(area_x + area_w / 2, area_y + 3 * mm, label)
+
+
+def draw_dimension_line(c, x1, y1, x2, y2, text, side="bottom", offset=8*mm, tick=3*mm):
+    """Draw a dimension line with tick marks and centred label.
+    side: 'bottom'/'top' for horizontal dims, 'left'/'right' for vertical dims.
+    """
+    c.setLineWidth(0.4)
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setFillColor(colors.HexColor("#333333"))
+
+    if abs(x2 - x1) > abs(y2 - y1):  # horizontal
+        sign = -1 if side == "bottom" else 1
+        dy = sign * offset
+        # dim line
+        c.line(x1, y1 + dy, x2, y2 + dy)
+        # ticks
+        c.line(x1, y1, x1, y1 + dy + sign * tick)
+        c.line(x2, y2, x2, y2 + dy + sign * tick)
+        # arrows (small triangles)
+        arrow = 2 * mm
+        c.line(x1, y1 + dy, x1 + arrow, y1 + dy + arrow / 2)
+        c.line(x1, y1 + dy, x1 + arrow, y1 + dy - arrow / 2)
+        c.line(x2, y2 + dy, x2 - arrow, y2 + dy + arrow / 2)
+        c.line(x2, y2 + dy, x2 - arrow, y2 + dy - arrow / 2)
+        # label
+        c.setFont("Helvetica", 7)
+        c.drawCentredString((x1 + x2) / 2, y1 + dy + sign * (3 * mm), text)
+    else:  # vertical
+        sign = -1 if side == "left" else 1
+        dx = sign * offset
+        c.line(x1 + dx, y1, x2 + dx, y2)
+        c.line(x1, y1, x1 + dx + sign * tick, y1)
+        c.line(x2, y2, x2 + dx + sign * tick, y2)
+        arrow = 2 * mm
+        c.line(x1 + dx, y1, x1 + dx + arrow / 2, y1 + arrow)
+        c.line(x1 + dx, y1, x1 + dx - arrow / 2, y1 + arrow)
+        c.line(x2 + dx, y2, x2 + dx + arrow / 2, y2 - arrow)
+        c.line(x2 + dx, y2, x2 + dx - arrow / 2, y2 - arrow)
+        c.saveState()
+        c.translate(x1 + dx - sign * (3 * mm), (y1 + y2) / 2)
+        c.rotate(90)
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(0, 0, text)
+        c.restoreState()
+    c.setFillColor(colors.black)
 
 
 def draw_title_block(c, page_num, total_pages, title):
@@ -476,127 +522,232 @@ def page_details(c, page_num, total_pages):
     c.showPage()
 
 
-def page_tabletop_drawing(c, page_num, total_pages, top_rl, iso_rl):
-    """Dedicated drawing page for the L-shaped tabletop."""
+def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
+    """Full page: left = annotated 2D L-shape schematic, right = isometric CQ render."""
     content_y = MARGIN + TITLE_H + 4 * mm
     content_h = PAGE_H - content_y - MARGIN
-    half_w = DRAW_W / 2 - 2 * mm
+    half_w = DRAW_W / 2 - 4 * mm
 
     c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(colors.black)
     c.drawString(MARGIN, content_y + content_h + 2 * mm, "PART DRAWING — TABLETOP (L-SHAPED)")
 
-    # Top view (left panel)
-    place_drawing(c, top_rl, MARGIN, content_y + 14 * mm, half_w, content_h - 14 * mm, "TOP VIEW — 1:20")
+    # ── Right panel: isometric render ─────────────────────────────────────
+    place_drawing(c, iso_rl, MARGIN + half_w + 4 * mm, content_y + 10 * mm,
+                  half_w, content_h - 10 * mm, "ISOMETRIC VIEW")
 
-    # Isometric view (right panel)
-    place_drawing(c, iso_rl, MARGIN + half_w + 4 * mm, content_y + 14 * mm, half_w, content_h - 14 * mm, "ISOMETRIC VIEW")
+    # ── Left panel: 2D top-view schematic drawn with reportlab ────────────
+    # Drawing area
+    da_x = MARGIN + 4 * mm
+    da_y = content_y + 10 * mm
+    da_w = half_w - 8 * mm
+    da_h = content_h - 20 * mm
 
-    # Dimension annotations (top view area)
-    tx = MARGIN + 4 * mm
-    ty = content_y + 6 * mm
+    # Scale to fit: real dims 2700 × 1000mm
+    real_L = TABLE_LENGTH        # 2700
+    real_W = TABLE_WIDTH + EXT_DEPTH  # 1000
+    sx = (da_w - 40 * mm) / real_L   # leave margin for dim lines
+    sy = (da_h - 40 * mm) / real_W
+    scale = min(sx, sy)
+
+    # Origin = top-left of schematic, centred in panel
+    draw_w = real_L * scale
+    draw_h = real_W * scale
+    ox = da_x + (da_w - draw_w) / 2 + 8 * mm
+    oy = da_y + (da_h - draw_h) / 2 + 8 * mm
+
+    # EXT_LENGTH scaled
+    ext_l = EXT_LENGTH * scale
+    main_d = TABLE_WIDTH * scale
+    ext_d = EXT_DEPTH * scale
+    fillet_r = 100 * scale
+
+    # The L-shape (top-view, Y=up on page):
+    # Corners (going clockwise from top-left):
+    # A = ox, oy+draw_h          (top-left)
+    # B = ox+draw_w, oy+draw_h   (top-right)
+    # C = ox+draw_w, oy+ext_d    (bottom-right)
+    # D = ox+draw_w-ext_l, oy+ext_d  (step inner-right)
+    # E = ox+draw_w-ext_l, oy     (step inner-left, inside corner — has fillet)
+    # F = ox, oy                  (bottom-left)
+    # Note: in paper coords Y increases upward, so 'top' = back of table (wall side)
+
+    A = (ox,          oy + draw_h)
+    B = (ox + draw_w, oy + draw_h)
+    C = (ox + draw_w, oy + ext_d)
+    D = (ox + draw_w - ext_l, oy + ext_d)
+    # E is inside corner with fillet
+    E_corner = (ox + draw_w - ext_l, oy)
+    F = (ox, oy)
+
+    c.setStrokeColor(colors.HexColor("#222222"))
+    c.setFillColor(colors.HexColor("#f0e8d8"))
+    c.setLineWidth(1.2)
+
+    # Draw filled L-shape path
+    p = c.beginPath()
+    p.moveTo(*A)
+    p.lineTo(*B)
+    p.lineTo(*C)
+    p.lineTo(*D)
+    # fillet at inside corner E: draw arc
+    # Arc centre: (D[0] - fillet_r, E_corner[1] + fillet_r)
+    arc_cx = D[0] - fillet_r
+    arc_cy = E_corner[1] + fillet_r
+    p.arcTo(arc_cx - fillet_r, arc_cy - fillet_r,
+            arc_cx + fillet_r, arc_cy + fillet_r,
+            180, -90)  # from 270° to 180° = inside corner arc
+    p.lineTo(*F)
+    p.lineTo(*A)
+    p.close()
+    c.drawPath(p, fill=1, stroke=1)
+
+    # ── Dimension lines ───────────────────────────────────────────────────
+    # Overall length (top, above shape)
+    draw_dimension_line(c, A[0], A[1], B[0], B[1], f"{TABLE_LENGTH} mm", side="top", offset=7*mm)
+
+    # Main depth (left side, full height)
+    draw_dimension_line(c, F[0], F[1], A[0], A[1], f"{TABLE_WIDTH + EXT_DEPTH} mm", side="left", offset=9*mm)
+
+    # Main body depth only (right side, top portion)
+    draw_dimension_line(c, B[0], B[1], C[0], C[1], f"{TABLE_WIDTH} mm", side="right", offset=9*mm)
+
+    # Extension depth (right side, bottom portion)
+    draw_dimension_line(c, C[0], C[1], (ox + draw_w, oy)[0], (ox + draw_w, oy)[1],
+                        f"{EXT_DEPTH} mm", side="right", offset=9*mm)
+
+    # Extension width (bottom, ext portion only)
+    draw_dimension_line(c, D[0], D[1], C[0], D[1], f"{EXT_LENGTH} mm", side="bottom", offset=7*mm)
+
+    # Fillet label
+    c.setFont("Helvetica", 7)
+    c.setFillColor(colors.HexColor("#555555"))
+    c.drawString(arc_cx + 2 * mm, arc_cy + 2 * mm, f"R {100} mm")
+
+    # Thickness label (callout)
+    c.setFont("Helvetica", 7)
+    c.setFillColor(colors.HexColor("#222222"))
+    note_x = ox + draw_w / 2
+    note_y = oy + draw_h / 2
+    c.drawCentredString(note_x, note_y, f"Thickness: {TABLE_THICKNESS} mm")
+    c.drawCentredString(note_x, note_y - 4 * mm, "Material: 40 mm solid timber")
+    c.drawCentredString(note_x, note_y - 8 * mm, "or 40 mm engineered board")
+    c.drawCentredString(note_x, note_y - 12 * mm, "Qty: 1 off")
+
+    # Panel border
+    c.setStrokeColor(colors.HexColor("#aaaaaa"))
+    c.setLineWidth(0.3)
+    c.rect(da_x, da_y, da_w, da_h)
     c.setFont("Helvetica-Bold", 8)
-    c.drawString(tx, ty, "TABLETOP — L-SHAPE  |  Material: 40 mm solid timber or 40 mm engineered board")
-    c.setFont("Helvetica", 8)
-
-    dims_text = [
-        f"Overall length: {TABLE_LENGTH} mm",
-        f"Main depth (back to step): {TABLE_WIDTH} mm",
-        f"Extension depth (step to front): {EXT_DEPTH} mm",
-        f"Total depth: {TABLE_WIDTH + EXT_DEPTH} mm",
-        f"Extension width (right side): {EXT_LENGTH} mm (approx.)",
-        f"Thickness: {TABLE_THICKNESS} mm",
-        "Inside corner fillet radius: 100 mm",
-        "Qty: 1 off",
-    ]
-    x = MARGIN + 4 * mm
-    for i, txt in enumerate(dims_text):
-        c.drawString(x + (i // 4) * 80 * mm, ty - ((i % 4) + 1) * 4.5 * mm, txt)
+    c.setFillColor(colors.black)
+    c.drawCentredString(da_x + da_w / 2, da_y + 3 * mm, "TOP VIEW (schematic, NTS)")
 
     draw_title_block(c, page_num, total_pages, "Part Drawing — Tabletop")
     c.showPage()
 
 
+def _draw_iso_box(c, ox, oy, w, d, h, scale, label, dims_text):
+    """Draw a simple isometric-projection box with reportlab, annotated."""
+    # isometric offsets per unit
+    ix, iy = 0.5 * scale, 0.25 * scale   # x-axis dir
+    jx, jy = -0.5 * scale, 0.25 * scale  # y-axis dir
+    kx, ky = 0, scale                     # z-axis (up)
+
+    def pt(xi, yi, zi):
+        return (ox + xi * ix + yi * jx, oy + xi * iy + yi * jy + zi * ky)
+
+    # 8 corners
+    p000 = pt(0, 0, 0);   p100 = pt(w, 0, 0)
+    p010 = pt(0, d, 0);   p110 = pt(w, d, 0)
+    p001 = pt(0, 0, h);   p101 = pt(w, 0, h)
+    p011 = pt(0, d, h);   p111 = pt(w, d, h)
+
+    c.setFillColor(colors.HexColor("#c8a96e"))
+    c.setStrokeColor(colors.HexColor("#5a3a1a"))
+    c.setLineWidth(0.6)
+
+    # Top face
+    tp = c.beginPath()
+    tp.moveTo(*p001); tp.lineTo(*p101); tp.lineTo(*p111); tp.lineTo(*p011); tp.close()
+    c.drawPath(tp, fill=1, stroke=1)
+
+    # Front face (y=0 plane)
+    fp = c.beginPath()
+    fp.moveTo(*p000); fp.lineTo(*p100); fp.lineTo(*p101); fp.lineTo(*p001); fp.close()
+    c.setFillColor(colors.HexColor("#b08040"))
+    c.drawPath(fp, fill=1, stroke=1)
+
+    # Right face (x=w plane)
+    rp = c.beginPath()
+    rp.moveTo(*p100); rp.lineTo(*p110); rp.lineTo(*p111); rp.lineTo(*p101); rp.close()
+    c.setFillColor(colors.HexColor("#9a6e30"))
+    c.drawPath(rp, fill=1, stroke=1)
+
+    # Part label above
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica-Bold", 8)
+    c.drawCentredString(ox, oy + h * ky + 6 * mm, label)
+
+    # Dimension annotations
+    c.setFont("Helvetica", 6.5)
+    for i, txt in enumerate(dims_text):
+        c.drawCentredString(ox, oy - 5 * mm - i * 4 * mm, txt)
+
+
 def page_timber_parts(c, page_num, total_pages):
-    """One page showing all unique timber cross-sections and lengths."""
+    """One page: annotated isometric drawings of all unique timber sections."""
     content_y = MARGIN + TITLE_H + 4 * mm
     content_h = PAGE_H - content_y - MARGIN
 
     c.setFont("Helvetica-Bold", 11)
-    c.drawString(MARGIN, content_y + content_h + 2 * mm, "TIMBER PARTS — CUT LIST OVERVIEW")
+    c.setFillColor(colors.black)
+    c.drawString(MARGIN, content_y + content_h + 2 * mm, "TIMBER PARTS — INDIVIDUAL PART DRAWINGS")
 
-    # Table-style cut list — no renders needed, clean text layout
     bom = get_bom()
     timber_bom = [b for b in bom if b["material"] not in ("Steel", "Steel (hot-dip galv.)") and b["part"] != "Tabletop panel"]
 
-    cols = [
-        ("Part", MARGIN + 2 * mm, 80 * mm),
-        ("Section (W×D)", MARGIN + 84 * mm, 35 * mm),
-        ("Length (mm)", MARGIN + 121 * mm, 30 * mm),
-        ("Qty", MARGIN + 153 * mm, 12 * mm),
-        ("Total length (mm)", MARGIN + 167 * mm, 35 * mm),
-        ("Notes", MARGIN + 204 * mm, 55 * mm),
-    ]
-    row_h = 8 * mm
-    ty = content_y + content_h - 6 * mm
+    # Layout: 3 columns × 2 rows
+    n_cols = 3
+    cell_w = DRAW_W / n_cols
+    cell_h = (content_h - 10 * mm) / 2
 
-    # Header
-    c.setFillColor(colors.HexColor("#333333"))
-    c.rect(MARGIN, ty - row_h + 2 * mm, DRAW_W, row_h, fill=1, stroke=0)
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 8)
-    for label, x, w in cols:
-        c.drawString(x, ty - row_h + 4 * mm, label)
-    ty -= row_h
+    iso_scale = 0.045  # mm → points at a sensible visual size, tweak if needed
 
-    for i, item in enumerate(timber_bom):
-        bg = colors.HexColor("#f5f5f5") if i % 2 == 0 else colors.white
-        c.setFillColor(bg)
-        c.rect(MARGIN, ty - row_h + 2 * mm, DRAW_W, row_h, fill=1, stroke=0)
-        c.setFillColor(colors.black)
-        c.setFont("Helvetica", 8)
-        w = item.get("width_mm")
-        d = item.get("depth_mm")
-        section = f"{w}×{d}" if w and d else "—"
-        total_l = item["qty"] * item["length_mm"] if item.get("length_mm") else "—"
-        vals = [
-            item["part"],
-            section,
-            str(item["length_mm"]),
-            str(item["qty"]),
-            str(total_l),
-            item.get("note", ""),
-        ]
-        for (label, x, cw), val in zip(cols, vals):
-            c.drawString(x, ty - row_h + 4 * mm, val[:int(cw / 2.2)])
-        ty -= row_h
+    for idx, item in enumerate(timber_bom[:6]):  # up to 6 parts in 3×2 grid
+        col = idx % n_cols
+        row = idx // n_cols
+        cx = MARGIN + col * cell_w + cell_w / 2
+        cy = content_y + content_h - 10 * mm - row * cell_h - cell_h * 0.35
 
-    # Section diagrams — draw simple cross-section boxes for each timber size
-    ty -= 8 * mm
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(MARGIN + 4 * mm, ty, "CROSS-SECTIONS (to scale at 1:2)")
-    ty -= 6 * mm
+        w = item.get("width_mm") or 50
+        d = item.get("depth_mm") or 75
+        l = item.get("length_mm") or 900
 
-    sections = [
-        ("75×75 mm — Leg / Wall beam", 75, 75),
-        ("50×75 mm — Stretcher / Apron / Rail", 50, 75),
-        ("20×15 mm — Slat", 20, 15),
-    ]
-    scale = 2.0  # 1:2 scale in mm per mm
-    sx = MARGIN + 10 * mm
-    for label, w, d in sections:
-        sw = w * scale
-        sd = d * scale
-        c.setFillColor(colors.HexColor("#c8a96e"))
-        c.setStrokeColor(colors.HexColor("#5a3a1a"))
-        c.setLineWidth(0.8)
-        c.rect(sx, ty - sd, sw, sd, fill=1, stroke=1)
-        c.setFillColor(colors.black)
-        c.setFont("Helvetica", 7)
-        c.drawString(sx, ty - sd - 4 * mm, f"{w}×{d} mm")
-        c.drawString(sx, ty - sd - 8 * mm, label)
-        sx += sw + 20 * mm
+        # Clamp visual length so it doesn't overflow
+        vis_l = min(l, 500)
 
-    draw_title_block(c, page_num, total_pages, "Timber Parts — Cut List")
+        _draw_iso_box(
+            c, cx, cy,
+            w=w * iso_scale,
+            d=d * iso_scale,
+            h=vis_l * iso_scale,
+            scale=1.0,
+            label=item["part"].split("—")[0].strip(),
+            dims_text=[
+                f"Section: {w} × {d} mm",
+                f"Length: {l} mm",
+                f"Qty: {item['qty']}",
+                item.get("note", ""),
+            ],
+        )
+
+        # Cell border
+        c.setLineWidth(0.2)
+        c.setStrokeColor(colors.HexColor("#dddddd"))
+        c.rect(MARGIN + col * cell_w, content_y + content_h - 10 * mm - (row + 1) * cell_h,
+               cell_w, cell_h)
+
+    draw_title_block(c, page_num, total_pages, "Timber Parts — Individual Drawings")
     c.showPage()
 
 
@@ -630,12 +781,10 @@ def main():
     print("Generating individual part SVGs...")
     part_svgs = {}
 
-    # Tabletop — render the actual L-shape
+    # Tabletop — render the actual L-shape (iso only; top view drawn directly with reportlab)
     tabletop_shape = make_tabletop()
     tabletop_iso_shape = iso_compound(tabletop_shape.val())
     part_svgs["tabletop_iso"] = export_temp_svg(tabletop_iso_shape, "part_tabletop_iso", 2400, 1400, show_hidden=False)
-    tabletop_top_shape = rotated(tabletop_shape.val(), (-1, 0, 0), 0)  # top view (no rotation)
-    part_svgs["tabletop_top"] = export_temp_svg(tabletop_top_shape, "part_tabletop_top", 2400, 1400, show_hidden=False)
 
     # Generic timber parts — render a box for each unique dimension
     def make_box_part(w, d, l):
@@ -680,9 +829,8 @@ def main():
     page_details(c, pn, total_pages); pn += 1
 
     # Part drawings
-    tabletop_top_rl = svg_to_rl(part_svgs["tabletop_top"], half_w - 4 * mm, content_h - 20 * mm)
     tabletop_iso_rl = svg_to_rl(part_svgs["tabletop_iso"], half_w - 4 * mm, content_h - 20 * mm)
-    page_tabletop_drawing(c, pn, total_pages, tabletop_top_rl, tabletop_iso_rl); pn += 1
+    page_tabletop_drawing(c, pn, total_pages, tabletop_iso_rl); pn += 1
     page_timber_parts(c, pn, total_pages); pn += 1
 
     c.save()

@@ -434,7 +434,7 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
 
     # ── Tabletop ─────────────────────────────────────────────────────────
     assy.add(
-        box(TABLE_LENGTH, TABLE_WIDTH, TABLE_THICKNESS),
+        make_tabletop(),
         name="tabletop",
         loc=loc(0, 0, LEG_HEIGHT + TABLE_THICKNESS / 2),
         color=Color("wheat"),
