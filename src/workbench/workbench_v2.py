@@ -350,6 +350,18 @@ def make_workbench():
             color=Color("burlywood"),
         )
 
+    # ── Top stretcher — right side of twinset enclosure ──────────────────
+    # Runs in Y, flush with inner (left) face of right leg, at apron height.
+    right_rail_x = right_x - LEG_WIDTH / 2 + STRETCHER_WIDTH / 2
+    right_rail_span = side_wall_y_back - side_wall_y_front
+    right_rail_center_y = (side_wall_y_front + side_wall_y_back) / 2
+    assy.add(
+        box(STRETCHER_WIDTH, right_rail_span, APRON_HEIGHT),
+        name="twinset_right_top_rail",
+        loc=loc(right_rail_x, right_rail_center_y, APRON_Z),
+        color=Color("saddlebrown"),
+    )
+
     return assy
 
 
