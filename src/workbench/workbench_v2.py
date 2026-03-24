@@ -38,6 +38,7 @@ FILLET_RADIUS = 100
 # Wall beam parameters (mounts flush against the wall at back of table)
 WALL_BEAM_WIDTH = 120
 WALL_BEAM_HEIGHT = 80
+WALL_BEAM_LENGTH = TABLE_LENGTH - 2 * STRETCHER_INSET  # inset on left and right sides
 
 OUTPUT_DIR = Path(__file__).parent
 
@@ -55,6 +56,7 @@ left_x = -TABLE_LENGTH / 2 + leg_inset_x
 right_x = TABLE_LENGTH / 2 - leg_inset_x
 front_y = -TABLE_WIDTH / 2 + leg_inset_y
 back_y = TABLE_WIDTH / 2 - leg_inset_y
+wall_back_y = TABLE_WIDTH / 2 - LEG_DEPTH / 2  # back legs/beam flush against the wall
 
 main_leg_positions = [
     ("front_left", left_x, front_y),
@@ -79,6 +81,8 @@ APRON_Z = LEG_HEIGHT - APRON_HEIGHT / 2
 
 main_span_x = abs(left_x - right_x)
 main_span_y = abs(front_y - back_y)
+wall_span_y = abs(front_y - wall_back_y)  # span from front leg to wall
+wall_center_y = (front_y + wall_back_y) / 2  # midpoint between front leg and wall
 
 ext_span_x = abs(ext_leg_positions[0][1] - ext_leg_positions[1][1])
 ext_span_y = abs(back_y - ext_leg_positions[0][2])
@@ -121,11 +125,11 @@ def make_tabletop():
 
 
 def make_wall_beam():
-    """Create the wall-mounted support beam that replaces the two back legs.
+    """Wall-mounted beam flush against the back wall.
 
-    Mounted flush against the back wall: 80 mm deep (Y) × 120 mm tall (Z).
+    Inset on X sides by STRETCHER_INSET. 80 mm deep (Y) × 120 mm tall (Z).
     """
-    return cq.Workplane("XY").box(TABLE_LENGTH, WALL_BEAM_HEIGHT, WALL_BEAM_WIDTH)
+    return cq.Workplane("XY").box(WALL_BEAM_LENGTH, WALL_BEAM_HEIGHT, WALL_BEAM_WIDTH)
 
 
 def loc(x, y, z):
@@ -138,11 +142,11 @@ def loc(x, y, z):
 # Stretchers run between legs at the bottom; aprons sit just under the tabletop.
 
 main_stretchers = [
-    ("left", STRETCHER_WIDTH, main_span_y - LEG_DEPTH, left_x, 0, STRETCHER_Z),
+    ("left", STRETCHER_WIDTH, wall_span_y - LEG_DEPTH, left_x, wall_center_y, STRETCHER_Z),
 ]
 
 main_aprons = [
-    ("left", APRON_THICKNESS, main_span_y + LEG_DEPTH, left_x, 0, APRON_Z),
+    ("left", APRON_THICKNESS, wall_span_y + LEG_DEPTH, left_x, wall_center_y, APRON_Z),
 ]
 
 ext_mid_x = (ext_leg_positions[0][1] + ext_leg_positions[1][1]) / 2
@@ -202,6 +206,15 @@ def make_workbench():
             color=Color("peru"),
         )
 
+    # ── Wall legs (back-left and back-right, floor-to-ceiling against wall) ───
+    for label, x in [("wall_back_left", left_x), ("wall_back_right", right_x)]:
+        assy.add(
+            box(LEG_WIDTH, LEG_DEPTH, LEG_HEIGHT),
+            name=f"leg_{label}",
+            loc=loc(x, wall_back_y, LEG_HEIGHT / 2),
+            color=Color("peru"),
+        )
+
     for label, lx, ly, x, y, z in main_stretchers + ext_stretchers:
         assy.add(
             box(lx, ly, STRETCHER_HEIGHT),
@@ -222,7 +235,7 @@ def make_workbench():
     assy.add(
         make_wall_beam(),
         name="wall_beam",
-        loc=loc(0, back_y, APRON_Z),
+        loc=loc(0, wall_back_y, APRON_Z),
         color=Color(0.4, 0.4, 0.4),
     )
 
