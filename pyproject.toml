@@ -14,6 +14,9 @@ dev = [
     "pre-commit>=4.5.1",
     "ruff>=0.15.7",
 ]
+editor = [
+    "cq-editor>=0.6.2",
+]
 
 [tool.ruff]
 target-version = "py312"
