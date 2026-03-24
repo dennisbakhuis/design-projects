@@ -15,17 +15,17 @@ TABLE_LENGTH = 2700
 TABLE_WIDTH = 800
 TABLE_THICKNESS = 40
 
-LEG_WIDTH = 80
-LEG_DEPTH = 80
+LEG_WIDTH = 75   # standard 75×75 mm planed timber
+LEG_DEPTH = 75
 LEG_HEIGHT = 960
 
-STRETCHER_WIDTH = 60
-STRETCHER_HEIGHT = 80
+STRETCHER_WIDTH = 50   # standard 50×75 mm planed timber
+STRETCHER_HEIGHT = 75
 STRETCHER_INSET = 50
 STRETCHER_Z = 150
 
-APRON_HEIGHT = 120
-APRON_THICKNESS = STRETCHER_WIDTH  # match stretcher thickness (60 mm)
+APRON_HEIGHT = 75      # matches stretcher cross-section
+APRON_THICKNESS = STRETCHER_WIDTH  # 50 mm, same as stretcher width
 
 # D12 twinset arrangement: 3 columns × 2 rows = 6 twinsets / 12 tanks
 TWINSET_COLS = 3
@@ -36,8 +36,8 @@ EXT_LENGTH = 750  # TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET
 FILLET_RADIUS = 100
 
 # Wall beam parameters (mounts flush against the wall at back of table)
-WALL_BEAM_WIDTH = 120
-WALL_BEAM_HEIGHT = 80
+WALL_BEAM_WIDTH = 75   # standard 75×75 mm planed timber (height, Z)
+WALL_BEAM_HEIGHT = 75  # depth into wall (Y)
 WALL_BEAM_LENGTH = TABLE_LENGTH - 2 * STRETCHER_INSET  # inset on left and right sides
 
 OUTPUT_DIR = Path(__file__).parent
