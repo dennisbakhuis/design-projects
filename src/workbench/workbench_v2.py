@@ -121,8 +121,11 @@ def make_tabletop():
 
 
 def make_wall_beam():
-    """Create the wall-mounted support beam that replaces the two back legs."""
-    return cq.Workplane("XY").box(TABLE_LENGTH, WALL_BEAM_WIDTH, WALL_BEAM_HEIGHT)
+    """Create the wall-mounted support beam that replaces the two back legs.
+
+    Mounted flush against the back wall: 80 mm deep (Y) × 120 mm tall (Z).
+    """
+    return cq.Workplane("XY").box(TABLE_LENGTH, WALL_BEAM_HEIGHT, WALL_BEAM_WIDTH)
 
 
 def loc(x, y, z):
@@ -135,12 +138,10 @@ def loc(x, y, z):
 # Stretchers run between legs at the bottom; aprons sit just under the tabletop.
 
 main_stretchers = [
-    ("back", main_span_x - LEG_WIDTH, STRETCHER_WIDTH, 0, back_y, STRETCHER_Z),
     ("left", STRETCHER_WIDTH, main_span_y - LEG_DEPTH, left_x, 0, STRETCHER_Z),
 ]
 
 main_aprons = [
-    ("back", main_span_x + LEG_WIDTH, APRON_THICKNESS, 0, back_y, APRON_Z),
     ("left", APRON_THICKNESS, main_span_y + LEG_DEPTH, left_x, 0, APRON_Z),
 ]
 
@@ -229,12 +230,12 @@ def make_workbench():
     # Twinsets are rotated 90° around Z so cylinders are side-by-side in Y.
     # Anchored to the back-right corner; back row is closest to the wall.
     column_spacing = TANK_DIAMETER + 30       # 202 mm per column
-    row_spacing = CYLINDER_SPACING + 30       # 233 mm per row
+    row_spacing = CYLINDER_SPACING + TANK_DIAMETER + 30   # 405 mm per row (full twinset Y footprint + gap)
 
     for row in range(TWINSET_ROWS):
         for col in range(TWINSET_COLS):
             tx = right_x - col * column_spacing
-            ty = (back_y - TANK_DIAMETER / 2) - row * row_spacing
+            ty = (back_y - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2) - row * row_spacing
             assy.add(
                 make_d12_twinset(),
                 name=f"d12_twinset_{row}_{col}",
