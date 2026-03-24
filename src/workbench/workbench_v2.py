@@ -15,35 +15,35 @@ TABLE_LENGTH = 2700
 TABLE_WIDTH = 800
 TABLE_THICKNESS = 40
 
-LEG_WIDTH = 75   # standard 75×75 mm planed timber
+LEG_WIDTH = 75  # standard 75x75 mm planed timber
 LEG_DEPTH = 75
 LEG_HEIGHT = 960
 
-STRETCHER_WIDTH = 50   # standard 50×75 mm planed timber
+STRETCHER_WIDTH = 50  # standard 50x75 mm planed timber
 STRETCHER_HEIGHT = 75
 STRETCHER_INSET = 50
 STRETCHER_Z = 150
 
-APRON_HEIGHT = 75      # matches stretcher cross-section
+APRON_HEIGHT = 75  # matches stretcher cross-section
 APRON_THICKNESS = STRETCHER_WIDTH  # 50 mm, same as stretcher width
 
-# D12 twinset arrangement: 3 columns × 2 rows = 6 twinsets / 12 tanks
+# D12 twinset arrangement: 3 columns x 2 rows = 6 twinsets / 12 tanks
 TWINSET_COLS = 3
 TWINSET_ROWS = 2
 
 # ── Twinset front slat wall ───────────────────────────────────────────────
-SLAT_WIDTH = 20      # face width of each slat (X direction), mm
-SLAT_DEPTH = 15      # depth of each slat (Y direction), mm
-SLAT_GAP = 10        # gap between slats, mm
-SLAT_BOTTOM_Z = 10   # clearance above floor, mm
+SLAT_WIDTH = 20  # face width of each slat (X direction), mm
+SLAT_DEPTH = 15  # depth of each slat (Y direction), mm
+SLAT_GAP = 10  # gap between slats, mm
+SLAT_BOTTOM_Z = 10  # clearance above floor, mm
 SLAT_TOP_CLEARANCE = 10  # clearance below tabletop underside, mm
 
 EXT_DEPTH = 200
-EXT_LENGTH = 750  # TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET
+EXT_LENGTH = TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET + 30
 FILLET_RADIUS = 100
 
 # Wall beam parameters (mounts flush against the wall at back of table)
-WALL_BEAM_WIDTH = 75   # standard 75×75 mm planed timber (height, Z)
+WALL_BEAM_WIDTH = 75  # standard 75x75 mm planed timber (height, Z)
 WALL_BEAM_HEIGHT = 75  # depth into wall (Y)
 WALL_BEAM_LENGTH = TABLE_LENGTH - 2 * STRETCHER_INSET  # inset on left and right sides
 
@@ -134,7 +134,7 @@ def make_tabletop():
 def make_wall_beam():
     """Wall-mounted beam flush against the back wall.
 
-    Inset on X sides by STRETCHER_INSET. 80 mm deep (Y) × 120 mm tall (Z).
+    Inset on X sides by STRETCHER_INSET. 80 mm deep (Y) x 120 mm tall (Z).
     """
     return cq.Workplane("XY").box(WALL_BEAM_LENGTH, WALL_BEAM_HEIGHT, WALL_BEAM_WIDTH)
 
@@ -266,11 +266,13 @@ def make_workbench():
         color=Color(0.4, 0.4, 0.4),
     )
 
-    # ── D12 twinsets: 3 columns × 2 rows = 6 twinsets / 12 tanks ─────────
+    # ── D12 twinsets: 3 columns x 2 rows = 6 twinsets / 12 tanks ─────────
     # Twinsets are rotated 90° around Z so cylinders are side-by-side in Y.
     # Anchored to the back-right corner; back row is closest to the wall.
-    column_spacing = TANK_DIAMETER + 30       # 202 mm per column
-    row_spacing = CYLINDER_SPACING + TANK_DIAMETER + 30   # 405 mm per row (full twinset Y footprint + gap)
+    column_spacing = TANK_DIAMETER + 30  # 202 mm per column
+    row_spacing = (
+        CYLINDER_SPACING + TANK_DIAMETER + 30
+    )  # 405 mm per row (full twinset Y footprint + gap)
 
     for row in range(TWINSET_ROWS):
         for col in range(TWINSET_COLS):
