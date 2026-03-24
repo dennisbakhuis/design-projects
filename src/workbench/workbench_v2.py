@@ -277,7 +277,7 @@ def make_workbench():
     for row in range(TWINSET_ROWS):
         for col in range(TWINSET_COLS):
             tx = (right_x + LEG_WIDTH / 2 - 10 - TANK_DIAMETER / 2) - col * column_spacing
-            ty = (wall_back_y - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2) - row * row_spacing
+            ty = (back_y - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2) - row * row_spacing
             assy.add(
                 make_d12_twinset(),
                 name=f"d12_twinset_{row}_{col}",
@@ -294,8 +294,9 @@ def make_workbench():
     slat_wall_width = slat_wall_x_right - slat_wall_x_left
     slat_wall_center_x = (slat_wall_x_right + slat_wall_x_left) / 2
 
-    # Y position: flush with the main table front face
-    slat_wall_y = -TABLE_WIDTH / 2 - SLAT_DEPTH / 2
+    # Y position: table front edge minus STRETCHER_INSET (50mm inside),
+    # matching the leg inset reference — slat front face at -(TABLE_WIDTH/2 - STRETCHER_INSET)
+    slat_wall_y = -(TABLE_WIDTH / 2 - STRETCHER_INSET) + SLAT_DEPTH / 2
 
     slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
 
