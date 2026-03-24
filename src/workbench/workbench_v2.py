@@ -203,7 +203,7 @@ ext_aprons = [
 # ── Assembly ─────────────────────────────────────────────────────────────────
 
 
-def make_workbench():
+def make_workbench(include_props: bool = True):
     """Assemble the complete workbench with legs, stretchers, and aprons.
 
     Returns
@@ -265,23 +265,24 @@ def make_workbench():
         color=Color(0.4, 0.4, 0.4),
     )
 
-    # ── D12 twinsets: 3 columns x 2 rows = 6 twinsets / 12 tanks ─────────
-    # Twinsets are rotated 90° around Z so cylinders are side-by-side in Y.
-    # Anchored to the back-right corner; back row is closest to the wall.
-    column_spacing = TANK_DIAMETER + 30  # 202 mm per column
-    row_spacing = (
-        CYLINDER_SPACING + TANK_DIAMETER + 30
-    )  # 405 mm per row (full twinset Y footprint + gap)
+    if include_props:
+        # ── D12 twinsets: 3 columns x 2 rows = 6 twinsets / 12 tanks ─────────
+        # Twinsets are rotated 90° around Z so cylinders are side-by-side in Y.
+        # Anchored to the back-right corner; back row is closest to the wall.
+        column_spacing = TANK_DIAMETER + 30  # 202 mm per column
+        row_spacing = (
+            CYLINDER_SPACING + TANK_DIAMETER + 30
+        )  # 405 mm per row (full twinset Y footprint + gap)
 
-    for row in range(TWINSET_ROWS):
-        for col in range(TWINSET_COLS):
-            tx = (right_x + LEG_WIDTH / 2 - 10 - TANK_DIAMETER / 2) - col * column_spacing
-            ty = (back_y - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2) - row * row_spacing
-            assy.add(
-                make_d12_twinset(),
-                name=f"d12_twinset_{row}_{col}",
-                loc=Location(Vector(tx, ty, 0), Vector(0, 0, 1), 90),
-            )
+        for row in range(TWINSET_ROWS):
+            for col in range(TWINSET_COLS):
+                tx = (right_x + LEG_WIDTH / 2 - 10 - TANK_DIAMETER / 2) - col * column_spacing
+                ty = (back_y - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2) - row * row_spacing
+                assy.add(
+                    make_d12_twinset(),
+                    name=f"d12_twinset_{row}_{col}",
+                    loc=Location(Vector(tx, ty, 0), Vector(0, 0, 1), 90),
+                )
 
     # ── Twinset front slat wall ───────────────────────────────────────────
     column_spacing_val = TANK_DIAMETER + 30  # must match the twinset loop value
