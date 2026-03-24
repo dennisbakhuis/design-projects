@@ -294,9 +294,10 @@ def make_workbench():
     slat_wall_width = slat_wall_x_right - slat_wall_x_left
     slat_wall_center_x = (slat_wall_x_right + slat_wall_x_left) / 2
 
-    # Y position: table front edge minus STRETCHER_INSET (50mm inside),
-    # matching the leg inset reference — slat front face at -(TABLE_WIDTH/2 - STRETCHER_INSET)
-    slat_wall_y = -(TABLE_WIDTH / 2 - STRETCHER_INSET) + SLAT_DEPTH / 2
+    # Y position: 950mm from the back wall = ext_front_y + STRETCHER_INSET
+    # Table is 800mm (main) + 200mm (extension) = 1000mm total depth.
+    # Slat front face at 1000 - 50 = 950mm from wall = ext_front_y + STRETCHER_INSET
+    slat_wall_y = ext_front_y + STRETCHER_INSET + SLAT_DEPTH / 2
 
     slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
 
