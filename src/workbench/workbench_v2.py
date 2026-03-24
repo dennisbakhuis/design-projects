@@ -25,7 +25,7 @@ STRETCHER_INSET = 50
 STRETCHER_Z = 150
 
 APRON_HEIGHT = 120
-APRON_THICKNESS = 30
+APRON_THICKNESS = STRETCHER_WIDTH  # match stretcher thickness (60 mm)
 
 # D12 twinset arrangement: 3 columns × 2 rows = 6 twinsets / 12 tanks
 TWINSET_COLS = 3
