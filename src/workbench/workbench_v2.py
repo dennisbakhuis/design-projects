@@ -183,7 +183,7 @@ ext_stretchers = [
         "ext_left",
         STRETCHER_WIDTH,
         ext_left_span_y - LEG_DEPTH,
-        ext_left_leg_x,
+        ext_left_leg_x + LEG_WIDTH / 2 - STRETCHER_WIDTH / 2,
         ext_left_center_y,
         STRETCHER_Z,
     ),
@@ -194,7 +194,7 @@ ext_aprons = [
         "ext_left",
         APRON_THICKNESS,
         ext_left_span_y + LEG_DEPTH,
-        ext_left_leg_x,
+        ext_left_leg_x + LEG_WIDTH / 2 - APRON_THICKNESS / 2,
         ext_left_center_y,
         APRON_Z,
     ),
@@ -324,6 +324,31 @@ def make_workbench():
         loc=loc(slat_wall_center_x, rail_y, APRON_Z),
         color=Color("saddlebrown"),
     )
+
+    # ── Twinset left side slat wall ───────────────────────────────────────
+    # Runs in Y (front to back), visible from the left when facing the workbench.
+    # Slat outer face is SLAT_WALL_INSET inside the left leg outer face.
+    side_slat_x = ext_left_leg_x - LEG_WIDTH / 2 + SLAT_WALL_INSET + SLAT_DEPTH / 2
+
+    # Y span: between inner faces of front and back legs
+    side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2   # inner face of front leg
+    side_wall_y_back = wall_back_y - LEG_DEPTH / 2        # inner face of back leg
+    side_wall_span_y = side_wall_y_back - side_wall_y_front
+    side_wall_center_y = (side_wall_y_front + side_wall_y_back) / 2
+
+    slat_pitch = SLAT_WIDTH + SLAT_GAP
+    n_side_slats = int(side_wall_span_y // slat_pitch)
+    side_array_span = n_side_slats * slat_pitch - SLAT_GAP
+    side_y_start = side_wall_center_y - side_array_span / 2 + SLAT_WIDTH / 2
+
+    for i in range(n_side_slats):
+        sy = side_y_start + i * slat_pitch
+        assy.add(
+            box(SLAT_DEPTH, SLAT_WIDTH, slat_height),
+            name=f"side_slat_{i}",
+            loc=loc(side_slat_x, sy, SLAT_BOTTOM_Z + slat_height / 2),
+            color=Color("burlywood"),
+        )
 
     return assy
 
