@@ -15,28 +15,36 @@ TABLE_LENGTH = 2700
 TABLE_WIDTH = 800
 TABLE_THICKNESS = 40
 
-LEG_WIDTH = 75   # standard 75×75 mm planed timber
+LEG_WIDTH = 75  # standard 75x75 mm planed timber
 LEG_DEPTH = 75
 LEG_HEIGHT = 960
 
-STRETCHER_WIDTH = 50   # standard 50×75 mm planed timber
+STRETCHER_WIDTH = 50  # standard 50x75 mm planed timber
 STRETCHER_HEIGHT = 75
 STRETCHER_INSET = 50
 STRETCHER_Z = 150
 
-APRON_HEIGHT = 75      # matches stretcher cross-section
+APRON_HEIGHT = 75  # matches stretcher cross-section
 APRON_THICKNESS = STRETCHER_WIDTH  # 50 mm, same as stretcher width
 
-# D12 twinset arrangement: 3 columns × 2 rows = 6 twinsets / 12 tanks
+# D12 twinset arrangement: 3 columns x 2 rows = 6 twinsets / 12 tanks
 TWINSET_COLS = 3
 TWINSET_ROWS = 2
 
+# ── Twinset front slat wall ───────────────────────────────────────────────
+SLAT_WIDTH = 20  # face width of each slat (X direction), mm
+SLAT_DEPTH = 15  # depth of each slat (Y direction), mm
+SLAT_GAP = 10  # gap between slats, mm
+SLAT_BOTTOM_Z = 10  # clearance above floor, mm
+SLAT_TOP_CLEARANCE = 10  # clearance below tabletop underside, mm
+SLAT_WALL_INSET = 10     # how far inside the leg front face the slat wall sits, mm
+
 EXT_DEPTH = 200
-EXT_LENGTH = 750  # TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET
+EXT_LENGTH = TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET + 30
 FILLET_RADIUS = 100
 
 # Wall beam parameters (mounts flush against the wall at back of table)
-WALL_BEAM_WIDTH = 75   # standard 75×75 mm planed timber (height, Z)
+WALL_BEAM_WIDTH = 75  # standard 75x75 mm planed timber (height, Z)
 WALL_BEAM_HEIGHT = 75  # depth into wall (Y)
 WALL_BEAM_LENGTH = TABLE_LENGTH - 2 * STRETCHER_INSET  # inset on left and right sides
 
@@ -127,13 +135,22 @@ def make_tabletop():
 def make_wall_beam():
     """Wall-mounted beam flush against the back wall.
 
-    Inset on X sides by STRETCHER_INSET. 80 mm deep (Y) × 120 mm tall (Z).
+    Inset on X sides by STRETCHER_INSET. 80 mm deep (Y) x 120 mm tall (Z).
     """
     return cq.Workplane("XY").box(WALL_BEAM_LENGTH, WALL_BEAM_HEIGHT, WALL_BEAM_WIDTH)
 
 
 def loc(x, y, z):
     return Location(Vector(x, y, z))
+
+
+def slat_wall_positions(total_width: float) -> list[float]:
+    """Return X offsets (relative to wall center) for each slat center."""
+    pitch = SLAT_WIDTH + SLAT_GAP
+    n_slats = int(total_width // pitch)
+    array_width = n_slats * pitch - SLAT_GAP
+    x_start = -array_width / 2 + SLAT_WIDTH / 2
+    return [x_start + i * pitch for i in range(n_slats)]
 
 
 # ── Stretcher & apron specs ──────────────────────────────────────────────────
@@ -162,24 +179,22 @@ ext_stretcher_mid_y = (back_y + ext_front_leg_y - LEG_DEPTH / 2) / 2
 ext_apron_mid_y = (back_y + ext_front_leg_y + LEG_DEPTH / 2) / 2
 
 ext_stretchers = [
-    ("ext_front", ext_span_x - LEG_WIDTH, STRETCHER_WIDTH, ext_mid_x, ext_front_leg_y, STRETCHER_Z),
     (
         "ext_left",
         STRETCHER_WIDTH,
         ext_left_span_y - LEG_DEPTH,
-        ext_left_leg_x,
+        ext_left_leg_x + LEG_WIDTH / 2 - STRETCHER_WIDTH / 2,
         ext_left_center_y,
         STRETCHER_Z,
     ),
 ]
 
 ext_aprons = [
-    ("ext_front", ext_span_x + LEG_WIDTH, APRON_THICKNESS, ext_mid_x, ext_front_leg_y, APRON_Z),
     (
         "ext_left",
         APRON_THICKNESS,
         ext_left_span_y + LEG_DEPTH,
-        ext_left_leg_x,
+        ext_left_leg_x + LEG_WIDTH / 2 - APRON_THICKNESS / 2,
         ext_left_center_y,
         APRON_Z,
     ),
@@ -250,11 +265,13 @@ def make_workbench():
         color=Color(0.4, 0.4, 0.4),
     )
 
-    # ── D12 twinsets: 3 columns × 2 rows = 6 twinsets / 12 tanks ─────────
+    # ── D12 twinsets: 3 columns x 2 rows = 6 twinsets / 12 tanks ─────────
     # Twinsets are rotated 90° around Z so cylinders are side-by-side in Y.
     # Anchored to the back-right corner; back row is closest to the wall.
-    column_spacing = TANK_DIAMETER + 30       # 202 mm per column
-    row_spacing = CYLINDER_SPACING + TANK_DIAMETER + 30   # 405 mm per row (full twinset Y footprint + gap)
+    column_spacing = TANK_DIAMETER + 30  # 202 mm per column
+    row_spacing = (
+        CYLINDER_SPACING + TANK_DIAMETER + 30
+    )  # 405 mm per row (full twinset Y footprint + gap)
 
     for row in range(TWINSET_ROWS):
         for col in range(TWINSET_COLS):
@@ -265,6 +282,85 @@ def make_workbench():
                 name=f"d12_twinset_{row}_{col}",
                 loc=Location(Vector(tx, ty, 0), Vector(0, 0, 1), 90),
             )
+
+    # ── Twinset front slat wall ───────────────────────────────────────────
+    column_spacing_val = TANK_DIAMETER + 30  # must match the twinset loop value
+    row_spacing_val = CYLINDER_SPACING + TANK_DIAMETER + 30
+
+    # X extent: between the inner faces of the extension legs (no clipping)
+    slat_wall_x_right = right_x - LEG_WIDTH / 2          # inner face of ext_front_right leg
+    slat_wall_x_left = ext_left_leg_x + LEG_WIDTH / 2    # inner face of ext_front_left leg
+    slat_wall_width = slat_wall_x_right - slat_wall_x_left
+    slat_wall_center_x = (slat_wall_x_right + slat_wall_x_left) / 2
+
+    # Y position: slightly inside the extension leg front face
+    # Leg front face is at ext_front_y + STRETCHER_INSET; slat sits SLAT_WALL_INSET mm behind it
+    slat_wall_y = ext_front_y + STRETCHER_INSET + SLAT_WALL_INSET + SLAT_DEPTH / 2
+
+    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
+
+    for i, x_offset in enumerate(slat_wall_positions(slat_wall_width)):
+        assy.add(
+            box(SLAT_WIDTH, SLAT_DEPTH, slat_height),
+            name=f"slat_{i}",
+            loc=loc(slat_wall_center_x + x_offset, slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
+            color=Color("burlywood"),
+        )
+
+    # ── Twinset front mounting rails (slats attach to these) ─────────────
+    # Positioned just behind the slat wall back face, spanning the same X extent.
+    # Mounting rails flush with the inner (back) face of the extension front legs.
+    # Stretcher back face = leg back face → no clipping with slat wall.
+    rail_y = ext_front_leg_y + LEG_DEPTH / 2 - STRETCHER_WIDTH / 2
+    assy.add(
+        box(slat_wall_width, STRETCHER_WIDTH, STRETCHER_HEIGHT),
+        name="twinset_front_rail_bottom",
+        loc=loc(slat_wall_center_x, rail_y, STRETCHER_Z),
+        color=Color("sienna"),
+    )
+    assy.add(
+        box(slat_wall_width, APRON_THICKNESS, APRON_HEIGHT),
+        name="twinset_front_rail_top",
+        loc=loc(slat_wall_center_x, rail_y, APRON_Z),
+        color=Color("saddlebrown"),
+    )
+
+    # ── Twinset left side slat wall ───────────────────────────────────────
+    # Runs in Y (front to back), visible from the left when facing the workbench.
+    # Slat outer face is SLAT_WALL_INSET inside the left leg outer face.
+    side_slat_x = ext_left_leg_x - LEG_WIDTH / 2 + SLAT_WALL_INSET + SLAT_DEPTH / 2
+
+    # Y span: between inner faces of front and back legs
+    side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2   # inner face of front leg
+    side_wall_y_back = wall_back_y - LEG_DEPTH / 2        # inner face of back leg
+    side_wall_span_y = side_wall_y_back - side_wall_y_front
+    side_wall_center_y = (side_wall_y_front + side_wall_y_back) / 2
+
+    slat_pitch = SLAT_WIDTH + SLAT_GAP
+    n_side_slats = int(side_wall_span_y // slat_pitch)
+    side_array_span = n_side_slats * slat_pitch - SLAT_GAP
+    side_y_start = side_wall_center_y - side_array_span / 2 + SLAT_WIDTH / 2
+
+    for i in range(n_side_slats):
+        sy = side_y_start + i * slat_pitch
+        assy.add(
+            box(SLAT_DEPTH, SLAT_WIDTH, slat_height),
+            name=f"side_slat_{i}",
+            loc=loc(side_slat_x, sy, SLAT_BOTTOM_Z + slat_height / 2),
+            color=Color("burlywood"),
+        )
+
+    # ── Top stretcher — right side of twinset enclosure ──────────────────
+    # Runs in Y, flush with inner (left) face of right leg, at apron height.
+    right_rail_x = right_x - LEG_WIDTH / 2 + STRETCHER_WIDTH / 2
+    right_rail_span = side_wall_y_back - side_wall_y_front
+    right_rail_center_y = (side_wall_y_front + side_wall_y_back) / 2
+    assy.add(
+        box(STRETCHER_WIDTH, right_rail_span, APRON_HEIGHT),
+        name="twinset_right_top_rail",
+        loc=loc(right_rail_x, right_rail_center_y, APRON_Z),
+        color=Color("saddlebrown"),
+    )
 
     return assy
 
