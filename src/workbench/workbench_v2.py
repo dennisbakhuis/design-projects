@@ -319,9 +319,9 @@ def get_bom():
             "material": "40mm solid timber / engineered board",
             "qty": 1,
             "width_mm": TABLE_LENGTH,
-            "depth_mm": TABLE_WIDTH,
+            "depth_mm": TABLE_WIDTH + EXT_DEPTH,  # full L-shape span
             "length_mm": TABLE_THICKNESS,
-            "note": "Main work surface",
+            "note": "L-shaped top, 2700×1000mm — see part drawing",
         },
         # Front slats
         {

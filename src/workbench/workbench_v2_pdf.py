@@ -21,8 +21,10 @@ from reportlab.graphics import renderPDF
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from workbench.workbench_v2 import (
-    make_workbench, make_workbench_stage, get_bom,
+    make_workbench, make_workbench_stage, get_bom, make_tabletop,
     TABLE_LENGTH, TABLE_WIDTH, LEG_HEIGHT, TABLE_THICKNESS,
+    LEG_WIDTH, LEG_DEPTH, STRETCHER_WIDTH, APRON_THICKNESS, APRON_HEIGHT,
+    STRETCHER_HEIGHT, EXT_DEPTH, EXT_LENGTH, SLAT_WIDTH, SLAT_DEPTH,
 )
 
 OUTPUT_DIR = Path(__file__).parent
@@ -44,7 +46,7 @@ def iso_compound(compound):
     return rotated(r, (0, 1, 0), -35)
 
 
-def export_temp_svg(compound, view_name, width=1800, height=1000, show_hidden=True):
+def export_temp_svg(compound, view_name, width=2400, height=1600, show_hidden=True):
     tmp = tempfile.NamedTemporaryFile(suffix=f"_{view_name}.svg", delete=False)
     cq.exporters.export(
         compound,
@@ -474,6 +476,130 @@ def page_details(c, page_num, total_pages):
     c.showPage()
 
 
+def page_tabletop_drawing(c, page_num, total_pages, top_rl, iso_rl):
+    """Dedicated drawing page for the L-shaped tabletop."""
+    content_y = MARGIN + TITLE_H + 4 * mm
+    content_h = PAGE_H - content_y - MARGIN
+    half_w = DRAW_W / 2 - 2 * mm
+
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(MARGIN, content_y + content_h + 2 * mm, "PART DRAWING — TABLETOP (L-SHAPED)")
+
+    # Top view (left panel)
+    place_drawing(c, top_rl, MARGIN, content_y + 14 * mm, half_w, content_h - 14 * mm, "TOP VIEW — 1:20")
+
+    # Isometric view (right panel)
+    place_drawing(c, iso_rl, MARGIN + half_w + 4 * mm, content_y + 14 * mm, half_w, content_h - 14 * mm, "ISOMETRIC VIEW")
+
+    # Dimension annotations (top view area)
+    tx = MARGIN + 4 * mm
+    ty = content_y + 6 * mm
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(tx, ty, "TABLETOP — L-SHAPE  |  Material: 40 mm solid timber or 40 mm engineered board")
+    c.setFont("Helvetica", 8)
+
+    dims_text = [
+        f"Overall length: {TABLE_LENGTH} mm",
+        f"Main depth (back to step): {TABLE_WIDTH} mm",
+        f"Extension depth (step to front): {EXT_DEPTH} mm",
+        f"Total depth: {TABLE_WIDTH + EXT_DEPTH} mm",
+        f"Extension width (right side): {EXT_LENGTH} mm (approx.)",
+        f"Thickness: {TABLE_THICKNESS} mm",
+        "Inside corner fillet radius: 100 mm",
+        "Qty: 1 off",
+    ]
+    x = MARGIN + 4 * mm
+    for i, txt in enumerate(dims_text):
+        c.drawString(x + (i // 4) * 80 * mm, ty - ((i % 4) + 1) * 4.5 * mm, txt)
+
+    draw_title_block(c, page_num, total_pages, "Part Drawing — Tabletop")
+    c.showPage()
+
+
+def page_timber_parts(c, page_num, total_pages):
+    """One page showing all unique timber cross-sections and lengths."""
+    content_y = MARGIN + TITLE_H + 4 * mm
+    content_h = PAGE_H - content_y - MARGIN
+
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(MARGIN, content_y + content_h + 2 * mm, "TIMBER PARTS — CUT LIST OVERVIEW")
+
+    # Table-style cut list — no renders needed, clean text layout
+    bom = get_bom()
+    timber_bom = [b for b in bom if b["material"] not in ("Steel", "Steel (hot-dip galv.)") and b["part"] != "Tabletop panel"]
+
+    cols = [
+        ("Part", MARGIN + 2 * mm, 80 * mm),
+        ("Section (W×D)", MARGIN + 84 * mm, 35 * mm),
+        ("Length (mm)", MARGIN + 121 * mm, 30 * mm),
+        ("Qty", MARGIN + 153 * mm, 12 * mm),
+        ("Total length (mm)", MARGIN + 167 * mm, 35 * mm),
+        ("Notes", MARGIN + 204 * mm, 55 * mm),
+    ]
+    row_h = 8 * mm
+    ty = content_y + content_h - 6 * mm
+
+    # Header
+    c.setFillColor(colors.HexColor("#333333"))
+    c.rect(MARGIN, ty - row_h + 2 * mm, DRAW_W, row_h, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 8)
+    for label, x, w in cols:
+        c.drawString(x, ty - row_h + 4 * mm, label)
+    ty -= row_h
+
+    for i, item in enumerate(timber_bom):
+        bg = colors.HexColor("#f5f5f5") if i % 2 == 0 else colors.white
+        c.setFillColor(bg)
+        c.rect(MARGIN, ty - row_h + 2 * mm, DRAW_W, row_h, fill=1, stroke=0)
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica", 8)
+        w = item.get("width_mm")
+        d = item.get("depth_mm")
+        section = f"{w}×{d}" if w and d else "—"
+        total_l = item["qty"] * item["length_mm"] if item.get("length_mm") else "—"
+        vals = [
+            item["part"],
+            section,
+            str(item["length_mm"]),
+            str(item["qty"]),
+            str(total_l),
+            item.get("note", ""),
+        ]
+        for (label, x, cw), val in zip(cols, vals):
+            c.drawString(x, ty - row_h + 4 * mm, val[:int(cw / 2.2)])
+        ty -= row_h
+
+    # Section diagrams — draw simple cross-section boxes for each timber size
+    ty -= 8 * mm
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(MARGIN + 4 * mm, ty, "CROSS-SECTIONS (to scale at 1:2)")
+    ty -= 6 * mm
+
+    sections = [
+        ("75×75 mm — Leg / Wall beam", 75, 75),
+        ("50×75 mm — Stretcher / Apron / Rail", 50, 75),
+        ("20×15 mm — Slat", 20, 15),
+    ]
+    scale = 2.0  # 1:2 scale in mm per mm
+    sx = MARGIN + 10 * mm
+    for label, w, d in sections:
+        sw = w * scale
+        sd = d * scale
+        c.setFillColor(colors.HexColor("#c8a96e"))
+        c.setStrokeColor(colors.HexColor("#5a3a1a"))
+        c.setLineWidth(0.8)
+        c.rect(sx, ty - sd, sw, sd, fill=1, stroke=1)
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica", 7)
+        c.drawString(sx, ty - sd - 4 * mm, f"{w}×{d} mm")
+        c.drawString(sx, ty - sd - 8 * mm, label)
+        sx += sw + 20 * mm
+
+    draw_title_block(c, page_num, total_pages, "Timber Parts — Cut List")
+    c.showPage()
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -498,10 +624,35 @@ def main():
         stage_assy = make_workbench_stage(step["stage"])
         stage_compound = stage_assy.toCompound()
         stage_iso = iso_compound(stage_compound)
-        svg = export_temp_svg(stage_iso, f"stage_{step['stage']}", 1600, 900, show_hidden=False)
+        svg = export_temp_svg(stage_iso, f"stage_{step['stage']}", 2000, 1200, show_hidden=False)
         stage_svgs.append(svg)
 
-    total_pages = 1 + 1 + 1 + 1 + len(IKEA_STEPS) + 1  # title + BOM + elev + plan + ikea*6 + details
+    print("Generating individual part SVGs...")
+    part_svgs = {}
+
+    # Tabletop — render the actual L-shape
+    tabletop_shape = make_tabletop()
+    tabletop_iso_shape = iso_compound(tabletop_shape.val())
+    part_svgs["tabletop_iso"] = export_temp_svg(tabletop_iso_shape, "part_tabletop_iso", 2400, 1400, show_hidden=False)
+    tabletop_top_shape = rotated(tabletop_shape.val(), (-1, 0, 0), 0)  # top view (no rotation)
+    part_svgs["tabletop_top"] = export_temp_svg(tabletop_top_shape, "part_tabletop_top", 2400, 1400, show_hidden=False)
+
+    # Generic timber parts — render a box for each unique dimension
+    def make_box_part(w, d, l):
+        return cq.Workplane("XY").box(w, d, l).val()
+
+    # Render each timber type
+    timber_parts = [
+        ("leg", LEG_WIDTH, LEG_DEPTH, LEG_HEIGHT),
+        ("stretcher_apron", STRETCHER_WIDTH, 75, 900),  # representative length
+        ("slat", SLAT_WIDTH, SLAT_DEPTH, 940),
+    ]
+    for name, w, d, l in timber_parts:
+        part = make_box_part(w, d, l)
+        iso = iso_compound(part)
+        part_svgs[f"timber_{name}"] = export_temp_svg(iso, f"part_{name}", 800, 600, show_hidden=False)
+
+    total_pages = 1 + 1 + 1 + 1 + len(IKEA_STEPS) + 1 + 2  # title + BOM + elev + plan + ikea*6 + details + part drawings
 
     half_w = DRAW_W / 2 - 2 * mm
     content_y = MARGIN + TITLE_H + 4 * mm
@@ -528,10 +679,19 @@ def main():
 
     page_details(c, pn, total_pages); pn += 1
 
+    # Part drawings
+    tabletop_top_rl = svg_to_rl(part_svgs["tabletop_top"], half_w - 4 * mm, content_h - 20 * mm)
+    tabletop_iso_rl = svg_to_rl(part_svgs["tabletop_iso"], half_w - 4 * mm, content_h - 20 * mm)
+    page_tabletop_drawing(c, pn, total_pages, tabletop_top_rl, tabletop_iso_rl); pn += 1
+    page_timber_parts(c, pn, total_pages); pn += 1
+
     c.save()
     print(f"PDF saved: {out_path}")
 
     for p in [top_svg, front_svg, side_svg, iso_svg] + stage_svgs:
+        p.unlink(missing_ok=True)
+
+    for p in part_svgs.values():
         p.unlink(missing_ok=True)
 
 
