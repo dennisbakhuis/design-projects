@@ -151,6 +151,13 @@ main_aprons = [
 
 ext_mid_x = (ext_leg_positions[0][1] + ext_leg_positions[1][1]) / 2
 ext_front_leg_y = ext_leg_positions[0][2]
+ext_left_leg_x = ext_left_edge_x + leg_inset_x  # X of ext back-left leg
+
+# ext_left stretcher/apron now spans from ext_front_left leg to wall_back_y
+ext_left_span_y = abs(wall_back_y - ext_front_leg_y)
+ext_left_center_y = (wall_back_y + ext_front_leg_y) / 2
+
+# ext_front stretcher/apron mid-points (unchanged, use for ext_front members)
 ext_stretcher_mid_y = (back_y + ext_front_leg_y - LEG_DEPTH / 2) / 2
 ext_apron_mid_y = (back_y + ext_front_leg_y + LEG_DEPTH / 2) / 2
 
@@ -159,9 +166,9 @@ ext_stretchers = [
     (
         "ext_left",
         STRETCHER_WIDTH,
-        ext_span_y - LEG_DEPTH / 2,
-        ext_leg_positions[1][1],
-        ext_stretcher_mid_y,
+        ext_left_span_y - LEG_DEPTH,
+        ext_left_leg_x,
+        ext_left_center_y,
         STRETCHER_Z,
     ),
 ]
@@ -171,9 +178,9 @@ ext_aprons = [
     (
         "ext_left",
         APRON_THICKNESS,
-        ext_span_y + LEG_DEPTH / 2,
-        ext_leg_positions[1][1],
-        ext_apron_mid_y,
+        ext_left_span_y + LEG_DEPTH,
+        ext_left_leg_x,
+        ext_left_center_y,
         APRON_Z,
     ),
 ]
@@ -206,8 +213,12 @@ def make_workbench():
             color=Color("peru"),
         )
 
-    # ── Wall legs (back-left and back-right, floor-to-ceiling against wall) ───
-    for label, x in [("wall_back_left", left_x), ("wall_back_right", right_x)]:
+    # ── Wall legs (back-left, back-right, ext-back-left — floor-to-ceiling) ──
+    for label, x in [
+        ("wall_back_left", left_x),
+        ("wall_back_right", right_x),
+        ("ext_back_left", ext_left_leg_x),
+    ]:
         assy.add(
             box(LEG_WIDTH, LEG_DEPTH, LEG_HEIGHT),
             name=f"leg_{label}",
