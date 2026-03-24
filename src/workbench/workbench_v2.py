@@ -277,7 +277,7 @@ def make_workbench():
     for row in range(TWINSET_ROWS):
         for col in range(TWINSET_COLS):
             tx = (right_x + LEG_WIDTH / 2 - 10 - TANK_DIAMETER / 2) - col * column_spacing
-            ty = (back_y - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2) - row * row_spacing
+            ty = (wall_back_y - CYLINDER_SPACING / 2 - TANK_DIAMETER / 2) - row * row_spacing
             assy.add(
                 make_d12_twinset(),
                 name=f"d12_twinset_{row}_{col}",
@@ -288,11 +288,9 @@ def make_workbench():
     column_spacing_val = TANK_DIAMETER + 30  # must match the twinset loop value
     row_spacing_val = CYLINDER_SPACING + TANK_DIAMETER + 30
 
-    # X extent of twinset storage
-    slat_wall_x_right = right_x + LEG_WIDTH / 2
-    tx_col0 = right_x + LEG_WIDTH / 2 - 10 - TANK_DIAMETER / 2
-    tx_col_last = tx_col0 - (TWINSET_COLS - 1) * column_spacing_val
-    slat_wall_x_left = tx_col_last - TANK_DIAMETER / 2
+    # X extent: flush with outer faces of the bounding legs
+    slat_wall_x_right = right_x + LEG_WIDTH / 2          # outer face of wall_back_right leg
+    slat_wall_x_left = ext_left_leg_x - LEG_WIDTH / 2    # outer face of ext_back_left leg
     slat_wall_width = slat_wall_x_right - slat_wall_x_left
     slat_wall_center_x = (slat_wall_x_right + slat_wall_x_left) / 2
 
