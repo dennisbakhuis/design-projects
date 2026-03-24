@@ -179,7 +179,6 @@ ext_stretcher_mid_y = (back_y + ext_front_leg_y - LEG_DEPTH / 2) / 2
 ext_apron_mid_y = (back_y + ext_front_leg_y + LEG_DEPTH / 2) / 2
 
 ext_stretchers = [
-    ("ext_front", ext_span_x - LEG_WIDTH, STRETCHER_WIDTH, ext_mid_x, ext_front_leg_y, STRETCHER_Z),
     (
         "ext_left",
         STRETCHER_WIDTH,
@@ -191,7 +190,6 @@ ext_stretchers = [
 ]
 
 ext_aprons = [
-    ("ext_front", ext_span_x + LEG_WIDTH, APRON_THICKNESS, ext_mid_x, ext_front_leg_y, APRON_Z),
     (
         "ext_left",
         APRON_THICKNESS,
@@ -311,18 +309,17 @@ def make_workbench():
 
     # ── Twinset front mounting rails (slats attach to these) ─────────────
     # Positioned just behind the slat wall back face, spanning the same X extent.
-    rail_y = slat_wall_y + SLAT_DEPTH / 2 + STRETCHER_WIDTH / 2
-
+    # Mounting rails anchored at the extension front legs (replaces the removed ext_front stretcher/apron)
     assy.add(
         box(slat_wall_width, STRETCHER_WIDTH, STRETCHER_HEIGHT),
         name="twinset_front_rail_bottom",
-        loc=loc(slat_wall_center_x, rail_y, STRETCHER_Z),
+        loc=loc(slat_wall_center_x, ext_front_leg_y, STRETCHER_Z),
         color=Color("sienna"),
     )
     assy.add(
         box(slat_wall_width, APRON_THICKNESS, APRON_HEIGHT),
         name="twinset_front_rail_top",
-        loc=loc(slat_wall_center_x, rail_y, APRON_Z),
+        loc=loc(slat_wall_center_x, ext_front_leg_y, APRON_Z),
         color=Color("saddlebrown"),
     )
 
