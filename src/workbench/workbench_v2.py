@@ -200,6 +200,300 @@ ext_aprons = [
     ),
 ]
 
+# ── Combined leg position lists (used by get_bom / make_workbench_stage) ─────
+
+leg_positions = main_leg_positions + ext_leg_positions  # floor legs (not wall)
+
+wall_leg_positions = [
+    ("wall_back_left", left_x, wall_back_y),
+    ("wall_back_right", right_x, wall_back_y),
+    ("ext_back_left", ext_left_leg_x, wall_back_y),
+]
+
+
+# ── Bill of Materials ─────────────────────────────────────────────────────────
+
+
+def get_bom():
+    """Return bill of materials as a list of dicts with keys:
+    part, material, qty, width_mm, depth_mm, length_mm, note
+    """
+    total_legs = len(leg_positions) + len(wall_leg_positions)
+
+    # Stretcher/apron lengths — compute from geometry
+    main_left_span = abs(wall_back_y - ext_front_leg_y) - LEG_DEPTH
+    front_rail_span = (right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2)
+    right_rail_span = abs(wall_back_y - LEG_DEPTH / 2 - (ext_front_leg_y + LEG_DEPTH / 2))
+
+    # Slat counts
+    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
+    front_wall_span = (right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2)
+    n_front_slats = int(front_wall_span // (SLAT_WIDTH + SLAT_GAP))
+    side_wall_span = (wall_back_y - LEG_DEPTH / 2) - (ext_front_leg_y + LEG_DEPTH / 2)
+    n_side_slats = int(side_wall_span // (SLAT_WIDTH + SLAT_GAP))
+
+    return [
+        # Legs 75×75
+        {
+            "part": "Leg 75×75mm",
+            "material": "Solid timber",
+            "qty": total_legs,
+            "width_mm": LEG_WIDTH,
+            "depth_mm": LEG_DEPTH,
+            "length_mm": LEG_HEIGHT,
+            "note": "All structural legs",
+        },
+        # Main left stretcher
+        {
+            "part": "Stretcher 50×75mm — left side",
+            "material": "Solid timber",
+            "qty": 1,
+            "width_mm": STRETCHER_WIDTH,
+            "depth_mm": 75,
+            "length_mm": round(main_left_span),
+            "note": "Front-left to wall, bottom rail",
+        },
+        # ext_left stretcher
+        {
+            "part": "Stretcher 50×75mm — ext left",
+            "material": "Solid timber",
+            "qty": 1,
+            "width_mm": STRETCHER_WIDTH,
+            "depth_mm": 75,
+            "length_mm": round(ext_left_span_y - LEG_DEPTH),
+            "note": "Ext-left side, bottom rail",
+        },
+        # Main left apron
+        {
+            "part": "Apron 50×75mm — left side",
+            "material": "Solid timber",
+            "qty": 1,
+            "width_mm": APRON_THICKNESS,
+            "depth_mm": 75,
+            "length_mm": round(main_left_span),
+            "note": "Front-left to wall, top rail",
+        },
+        # ext_left apron
+        {
+            "part": "Apron 50×75mm — ext left",
+            "material": "Solid timber",
+            "qty": 1,
+            "width_mm": APRON_THICKNESS,
+            "depth_mm": 75,
+            "length_mm": round(ext_left_span_y + LEG_DEPTH),
+            "note": "Ext-left side, top rail",
+        },
+        # Wall beam
+        {
+            "part": "Wall beam 75×75mm",
+            "material": "Solid timber",
+            "qty": 1,
+            "width_mm": WALL_BEAM_LENGTH,
+            "depth_mm": 75,
+            "length_mm": 75,
+            "note": "Wall-mounted back beam; lag-screw to wall",
+        },
+        # Twinset front mounting rails (bottom + top)
+        {
+            "part": "Slat mounting rail 50×75mm — front",
+            "material": "Solid timber",
+            "qty": 2,
+            "width_mm": STRETCHER_WIDTH,
+            "depth_mm": 75,
+            "length_mm": round(front_rail_span),
+            "note": "Bottom + top rails for front slat wall",
+        },
+        # Right side top rail
+        {
+            "part": "Rail 50×75mm — right side top",
+            "material": "Solid timber",
+            "qty": 1,
+            "width_mm": STRETCHER_WIDTH,
+            "depth_mm": 75,
+            "length_mm": round(right_rail_span),
+            "note": "Top rail, right side of twinset enclosure",
+        },
+        # Tabletop
+        {
+            "part": "Tabletop panel",
+            "material": "40mm solid timber / engineered board",
+            "qty": 1,
+            "width_mm": TABLE_LENGTH,
+            "depth_mm": TABLE_WIDTH,
+            "length_mm": TABLE_THICKNESS,
+            "note": "Main work surface",
+        },
+        # Front slats
+        {
+            "part": "Slat 20×15mm — front wall",
+            "material": "Solid timber",
+            "qty": n_front_slats,
+            "width_mm": SLAT_WIDTH,
+            "depth_mm": SLAT_DEPTH,
+            "length_mm": round(slat_height),
+            "note": "Decorative front slat panel",
+        },
+        # Side slats
+        {
+            "part": "Slat 20×15mm — left side wall",
+            "material": "Solid timber",
+            "qty": n_side_slats,
+            "width_mm": SLAT_WIDTH,
+            "depth_mm": SLAT_DEPTH,
+            "length_mm": round(slat_height),
+            "note": "Decorative left-side slat panel",
+        },
+        # Hardware
+        {
+            "part": "Pocket screws 50mm",
+            "material": "Steel",
+            "qty": 60,
+            "width_mm": None,
+            "depth_mm": None,
+            "length_mm": 50,
+            "note": "Leg-to-apron/stretcher joints (~4 per joint)",
+        },
+        {
+            "part": "Lag screw M10×120mm",
+            "material": "Steel (hot-dip galv.)",
+            "qty": 6,
+            "width_mm": None,
+            "depth_mm": None,
+            "length_mm": 120,
+            "note": "Wall beam to masonry/stud wall",
+        },
+        {
+            "part": "Wood screw 3.5×35mm",
+            "material": "Steel",
+            "qty": n_front_slats * 4 + n_side_slats * 4,
+            "width_mm": None,
+            "depth_mm": None,
+            "length_mm": 35,
+            "note": "Slat to mounting rail (2 per end per slat)",
+        },
+    ]
+
+
+# ── Staged assembly (IKEA-style manual) ───────────────────────────────────────
+
+
+def make_workbench_stage(stage: int) -> cq.Assembly:
+    """Build a partial assembly for IKEA-style manual illustrations.
+
+    Stages:
+      0 — legs only
+      1 — legs + stretchers
+      2 — legs + stretchers + aprons + wall beam
+      3 — add tabletop
+      4 — add slat mounting rails
+      5 — full assembly (slats included, no props)
+    """
+    assy = cq.Assembly(name="workbench_stage")
+
+    # ── Legs ────────────────────────────────────────────────────────────
+    for name, lx, ly in leg_positions:
+        assy.add(
+            box(LEG_WIDTH, LEG_DEPTH, LEG_HEIGHT),
+            name=name,
+            loc=loc(lx, ly, LEG_HEIGHT / 2),
+            color=Color("saddlebrown"),
+        )
+    for name, lx, ly in wall_leg_positions:
+        assy.add(
+            box(LEG_WIDTH, LEG_DEPTH, LEG_HEIGHT),
+            name=name,
+            loc=loc(lx, ly, LEG_HEIGHT / 2),
+            color=Color("saddlebrown"),
+        )
+    if stage < 1:
+        return assy
+
+    # ── Stretchers ──────────────────────────────────────────────────────
+    for name, lx, ly, x, y, z in main_stretchers:
+        assy.add(box(lx, ly, STRETCHER_HEIGHT), name=f"s_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+    for name, lx, ly, x, y, z in ext_stretchers:
+        assy.add(box(lx, ly, STRETCHER_HEIGHT), name=f"se_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+    if stage < 2:
+        return assy
+
+    # ── Aprons + wall beam ───────────────────────────────────────────────
+    for name, lx, ly, x, y, z in main_aprons:
+        assy.add(box(lx, ly, APRON_HEIGHT), name=f"a_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+    for name, lx, ly, x, y, z in ext_aprons:
+        assy.add(box(lx, ly, APRON_HEIGHT), name=f"ae_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+    wall_beam_x = (right_x + left_x) / 2
+    wall_beam_len = TABLE_LENGTH - 2 * STRETCHER_INSET
+    assy.add(
+        box(wall_beam_len, LEG_DEPTH, LEG_WIDTH),
+        name="wall_beam",
+        loc=loc(wall_beam_x, wall_back_y, APRON_Z),
+        color=Color("saddlebrown"),
+    )
+    if stage < 3:
+        return assy
+
+    # ── Tabletop ─────────────────────────────────────────────────────────
+    assy.add(
+        box(TABLE_LENGTH, TABLE_WIDTH, TABLE_THICKNESS),
+        name="tabletop",
+        loc=loc(0, 0, LEG_HEIGHT + TABLE_THICKNESS / 2),
+        color=Color("wheat"),
+    )
+    if stage < 4:
+        return assy
+
+    # ── Slat mounting rails ───────────────────────────────────────────────
+    rail_y = ext_front_leg_y + LEG_DEPTH / 2 - STRETCHER_WIDTH / 2
+    front_slat_x_left = ext_left_leg_x + LEG_WIDTH / 2
+    front_slat_x_right = right_x - LEG_WIDTH / 2
+    front_rail_span = front_slat_x_right - front_slat_x_left
+    front_rail_mid_x = (front_slat_x_left + front_slat_x_right) / 2
+    assy.add(box(front_rail_span, STRETCHER_WIDTH, STRETCHER_HEIGHT), name="front_rail_bot",
+             loc=loc(front_rail_mid_x, rail_y, STRETCHER_Z), color=Color("peru"))
+    assy.add(box(front_rail_span, STRETCHER_WIDTH, APRON_HEIGHT), name="front_rail_top",
+             loc=loc(front_rail_mid_x, rail_y, APRON_Z), color=Color("peru"))
+    right_rail_x = right_x - LEG_WIDTH / 2 + STRETCHER_WIDTH / 2
+    side_y_front = ext_front_leg_y + LEG_DEPTH / 2
+    side_y_back = wall_back_y - LEG_DEPTH / 2
+    right_rail_span = side_y_back - side_y_front
+    right_rail_cy = (side_y_front + side_y_back) / 2
+    assy.add(box(STRETCHER_WIDTH, right_rail_span, APRON_HEIGHT), name="right_rail_top",
+             loc=loc(right_rail_x, right_rail_cy, APRON_Z), color=Color("peru"))
+    if stage < 5:
+        return assy
+
+    # ── Slats ─────────────────────────────────────────────────────────────
+    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
+    side_slat_x = ext_left_leg_x - LEG_WIDTH / 2 + SLAT_WALL_INSET + SLAT_DEPTH / 2
+    front_slat_wall_y = ext_front_leg_y + LEG_DEPTH / 2 - SLAT_WALL_INSET - SLAT_DEPTH / 2
+
+    slat_x_left = ext_left_leg_x + LEG_WIDTH / 2
+    slat_x_right = right_x - LEG_WIDTH / 2
+    front_span = slat_x_right - slat_x_left
+    pitch = SLAT_WIDTH + SLAT_GAP
+    n_f = int(front_span // pitch)
+    arr_span_f = n_f * pitch - SLAT_GAP
+    x0 = (slat_x_left + slat_x_right) / 2 - arr_span_f / 2 + SLAT_WIDTH / 2
+    for i in range(n_f):
+        assy.add(box(SLAT_WIDTH, SLAT_DEPTH, slat_height), name=f"fs_{i}",
+                 loc=loc(x0 + i * pitch, front_slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
+                 color=Color("burlywood"))
+
+    side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2
+    side_wall_y_back = wall_back_y - LEG_DEPTH / 2
+    side_span = side_wall_y_back - side_wall_y_front
+    side_cy = (side_wall_y_front + side_wall_y_back) / 2
+    n_s = int(side_span // pitch)
+    arr_span_s = n_s * pitch - SLAT_GAP
+    y0 = side_cy - arr_span_s / 2 + SLAT_WIDTH / 2
+    for i in range(n_s):
+        assy.add(box(SLAT_DEPTH, SLAT_WIDTH, slat_height), name=f"ss_{i}",
+                 loc=loc(side_slat_x, y0 + i * pitch, SLAT_BOTTOM_Z + slat_height / 2),
+                 color=Color("burlywood"))
+
+    return assy
+
+
 # ── Assembly ─────────────────────────────────────────────────────────────────
 
 
