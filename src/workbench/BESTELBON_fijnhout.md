@@ -110,9 +110,14 @@ Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
 | Dikte | Breedte | Lengte | Stuks | Totaal volume |
 |-------|---------|--------|-------|---------------|
-| 27 mm | 200 mm  | 300 cm | 2     | 0,032 m³      |
+| 27 mm | 200 mm  | 300 cm | 3     | 0,049 m³      |
 
-**Geraamde prijs:** 0,032 m³ × €1.380/m³ = **≈ €45 excl. btw (€54 incl. btw)**
+> **Capaciteitsberekening (met 3 mm zaagsnede):**
+> - 8 stroken à 20 mm breed per plank (200 mm / 23 mm per snede)
+> - 3 latten à 940 mm per strook (3000 mm / 943 mm per snede)
+> - Opbrengst: 3 × 8 × 3 = **72 latten** — nodig: 43 → marge: 29 stuks ✓
+
+**Geraamde prijs:** 0,049 m³ × €1.380/m³ = **≈ €67 excl. btw (€81 incl. btw)**
 
 ---
 
