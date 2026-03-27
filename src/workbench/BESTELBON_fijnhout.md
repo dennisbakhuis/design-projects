@@ -13,22 +13,23 @@ Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
 ## A — Tafelblad · Beuken gestoomd en geschuurd · 52 mm
 
-> Vier planken op maximale lengte (380 cm). Elke plank levert:
-> - 270 cm voor het hoofdblad (4 × 200 mm breed = 800 mm totaalbreedte)
-> - 110 cm reststuk → 4 stuks à 80 cm voor de uitbouw (4 × 200 mm = 800 mm breed, inkorten naar 780 mm)
+> Vijf planken van 275 cm (max. transportlengte 300 cm). Per plank:
+> - 270 cm voor het hoofdblad → 4 planken × 200 mm breed = 800 mm totaalbreedte
+> - Slechts één zijde inkorten (5 mm afkorten voor een rechte kant) — de andere kant is fabrieksrecht
 >
-> Op het werkblad zijn de planken met de draad gelijmd (edge-glued).
-> Werkbladdikte 52 mm (ontwerp: 40 mm — upgraden voor extra massa en stabiliteit).
+> De 5e plank levert de uitbouw: 78 cm afknippen (197 cm reststuk voor andere projecten).
+>
+> Planken met de draad gelijmd (edge-glued). Dikte 52 mm (ontwerp: 40 mm — upgrade voor meer massa).
 
 | Dikte | Breedte | Lengte | Stuks | Totaal volume |
 |-------|---------|--------|-------|---------------|
-| 52 mm | 200 mm  | 380 cm | 4     | 0,158 m³      |
+| 52 mm | 200 mm  | 275 cm | 5     | 0,143 m³      |
 
-**Knipmaten (ter plekke of thuis):**
-- Hoofdblad: 4 × 270 cm (reststuk 110 cm per plank bewaren)
-- Uitbouw: 4 × 80 cm uit de reststukken; inkorten naar 78 cm breedte
+**Knipmaten:**
+- Hoofdblad: planken 1–4 inkorten naar 270 cm (5 cm afknippen voor rechte kant)
+- Uitbouw: plank 5 afknippen naar 78 cm (reststuk 197 cm)
 
-**Geraamde prijs:** 0,158 m³ × €1.380/m³ = **≈ €218 excl. btw**
+**Geraamde prijs:** 0,143 m³ × €1.380/m³ = **≈ €197 excl. btw**
 
 ---
 
@@ -83,12 +84,12 @@ Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
 | Post | Prijs excl. btw |
 |------|-----------------|
-| A — Tafelblad beuken 52 mm      | € 218 |
+| A — Tafelblad beuken 52 mm      | € 197 |
 | B — Eiken balken 8×8 cm         | €  82 |
 | C — Constructieplanken beuken   | €  65 |
-| **Subtotaal**                   | **€ 365** |
-| BTW 21%                         | €  77 |
-| **Totaal incl. btw**            | **≈ € 442** |
+| **Subtotaal**                   | **€ 344** |
+| BTW 21%                         | €  72 |
+| **Totaal incl. btw**            | **≈ € 416** |
 
 ---
 
