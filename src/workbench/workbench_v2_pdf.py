@@ -29,6 +29,7 @@ from workbench.workbench_v2 import (
     LEG_WIDTH, LEG_DEPTH, STRETCHER_WIDTH, APRON_THICKNESS, APRON_HEIGHT,
     STRETCHER_HEIGHT, STRETCHER_Z, EXT_DEPTH, EXT_LENGTH, FILLET_RADIUS, SLAT_WIDTH, SLAT_DEPTH,
     TENON_THICKNESS, TENON_HEIGHT, TENON_LENGTH, MORTISE_DEPTH,
+    left_x, right_x, ext_left_leg_x,
 )
 
 OUTPUT_DIR = Path(__file__).parent
@@ -358,6 +359,20 @@ def page_elevations(c, page_num, total_pages, front_rl, side_rl, front_svg, side
     draw_dimension_line(c, fl_x, f0_y, fl_x, fstr_y,
                         f"{STRETCHER_Z} mm", side="left", offset=9*mm)
 
+    # ── Segment A and B (pootkant-tot-pootkant) ──────────────────────────
+    # Segment A: right face of front-left leg → left face of ext-front-left leg
+    seg_a_x1, _ = fc(left_x + LEG_WIDTH / 2, 0)
+    seg_a_x2, _ = fc(ext_left_leg_x - LEG_WIDTH / 2, 0)
+    seg_a = round((ext_left_leg_x - LEG_WIDTH / 2) - (left_x + LEG_WIDTH / 2))
+    draw_dimension_line(c, seg_a_x1, f0_y, seg_a_x2, f0_y,
+                        f"{seg_a} mm  (seg A — kar)", side="bottom", offset=18*mm)
+    # Segment B: right face of ext-front-left leg → left face of ext-front-right leg
+    seg_b_x1, _ = fc(ext_left_leg_x + LEG_WIDTH / 2, 0)
+    seg_b_x2, _ = fc(right_x - LEG_WIDTH / 2, 0)
+    seg_b = round((right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2))
+    draw_dimension_line(c, seg_b_x1, f0_y, seg_b_x2, f0_y,
+                        f"{seg_b} mm  (seg B — tanks)", side="bottom", offset=18*mm)
+
     # ── Side elevation: model horiz=Y (depth), model vert=Z ──────────────
     sc = make_coord_converter(side_svg, side_rl, sx, sy)
     sf_x, s0_y  = sc(-half_W, 0)
@@ -586,10 +601,10 @@ def page_details(c, page_num, total_pages):
         ("Leg height", f"{LEG_HEIGHT} mm"),
         ("Tabletop thickness", f"{TABLE_THICKNESS} mm"),
         ("Overall height", f"{LEG_HEIGHT + TABLE_THICKNESS} mm"),
-        ("Legs", "75 × 75 mm solid timber"),
-        ("Stretchers", "50 × 75 mm (at 150 mm from floor)"),
-        ("Aprons", "50 × 75 mm (at 933 mm from floor)"),
-        ("Wall beam", "75 × 75 mm, wall-anchored"),
+        ("Legs", f"{LEG_WIDTH} × {LEG_DEPTH} mm eiken balk"),
+        ("Stretchers", f"{STRETCHER_WIDTH} × 75 mm (at {STRETCHER_Z} mm from floor)"),
+        ("Aprons", f"{APRON_THICKNESS} × 75 mm (at {round(LEG_HEIGHT - APRON_HEIGHT/2)} mm from floor)"),
+        ("Wall beam", f"{LEG_WIDTH} × {LEG_DEPTH} mm, wall-anchored"),
         ("Slats", "20 × 15 mm, 10 mm gaps"),
     ]
 

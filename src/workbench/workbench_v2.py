@@ -14,13 +14,13 @@ from helper_objects.hbm_tool_cart import make_hbm_tool_cart
 
 TABLE_LENGTH = 2700
 TABLE_WIDTH = 800
-TABLE_THICKNESS = 40
+TABLE_THICKNESS = 52   # beuken gestoomd 52 mm (per BESTELBON)
 
-LEG_WIDTH = 75  # standard 75x75 mm planed timber
-LEG_DEPTH = 75
+LEG_WIDTH = 80  # eiken balk 80×80 mm (per BESTELBON)
+LEG_DEPTH = 80
 LEG_HEIGHT = 970
 
-STRETCHER_WIDTH = 50  # standard 50x75 mm planed timber
+STRETCHER_WIDTH = 52  # beuken 52×75 mm (per BESTELBON; uit 52×150 gesplist)
 STRETCHER_HEIGHT = 75
 STRETCHER_INSET = 50
 STRETCHER_Z = 150
@@ -42,8 +42,8 @@ TWINSET_ROWS = 2
 SLAT_WIDTH = 20  # face width of each slat (X direction), mm
 SLAT_DEPTH = 15  # depth of each slat (Y direction), mm
 SLAT_GAP = 10  # gap between slats, mm
-SLAT_BOTTOM_Z = 10  # clearance above floor, mm
-SLAT_TOP_CLEARANCE = 10  # clearance below tabletop underside, mm
+SLAT_BOTTOM_Z = 15       # clearance above floor, mm → slat = 970−15−15 = 940 mm
+SLAT_TOP_CLEARANCE = 15  # clearance below tabletop underside, mm
 SLAT_WALL_INSET = 10     # how far inside the leg front face the slat wall sits, mm
 
 EXT_DEPTH = 200
@@ -51,8 +51,8 @@ EXT_LENGTH = TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET + 30
 FILLET_RADIUS = 100
 
 # Wall beam parameters (mounts flush against the wall at back of table)
-WALL_BEAM_WIDTH = 75  # standard 75x75 mm planed timber (height, Z)
-WALL_BEAM_HEIGHT = 75  # depth into wall (Y)
+WALL_BEAM_WIDTH = 80   # eiken balk 80×80 mm (per BESTELBON)
+WALL_BEAM_HEIGHT = 80  # depth into wall (Y)
 WALL_BEAM_LENGTH = TABLE_LENGTH - 2 * STRETCHER_INSET  # inset on left and right sides
 
 OUTPUT_DIR = Path(__file__).parent
@@ -240,95 +240,95 @@ def get_bom():
     n_side_slats = int(side_wall_span // (SLAT_WIDTH + SLAT_GAP))
 
     return [
-        # Legs 75×75
+        # Legs
         {
-            "part": "Leg 75×75mm",
-            "material": "Solid timber",
+            "part": f"Leg {LEG_WIDTH}×{LEG_DEPTH}mm",
+            "material": "Eiken balk",
             "qty": total_legs,
             "width_mm": LEG_WIDTH,
             "depth_mm": LEG_DEPTH,
             "length_mm": LEG_HEIGHT,
-            "note": "All structural legs",
+            "note": "Alle constructiepoten",
         },
         # Main left stretcher
         {
-            "part": "Stretcher 50×75mm — left side",
-            "material": "Solid timber",
+            "part": f"Strekker {STRETCHER_WIDTH}×75mm — linkerzijde",
+            "material": "Beuken gestoomd",
             "qty": 1,
             "width_mm": STRETCHER_WIDTH,
-            "depth_mm": 75,
+            "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(main_left_span),
-            "note": "Front-left to wall, bottom rail",
+            "note": "Voorkant-links tot wand, onderste regel",
         },
         # ext_left stretcher
         {
-            "part": "Stretcher 50×75mm — ext left",
-            "material": "Solid timber",
+            "part": f"Strekker {STRETCHER_WIDTH}×75mm — uitbouw links",
+            "material": "Beuken gestoomd",
             "qty": 1,
             "width_mm": STRETCHER_WIDTH,
-            "depth_mm": 75,
+            "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(ext_left_span_y - LEG_DEPTH),
-            "note": "Ext-left side, bottom rail",
+            "note": "Uitbouw linkerzijde, onderste regel",
         },
         # Main left apron
         {
-            "part": "Apron 50×75mm — left side",
-            "material": "Solid timber",
+            "part": f"Apron {APRON_THICKNESS}×75mm — linkerzijde",
+            "material": "Beuken gestoomd",
             "qty": 1,
             "width_mm": APRON_THICKNESS,
-            "depth_mm": 75,
+            "depth_mm": APRON_HEIGHT,
             "length_mm": round(main_left_span),
-            "note": "Front-left to wall, top rail",
+            "note": "Voorkant-links tot wand, bovenste regel",
         },
         # ext_left apron
         {
-            "part": "Apron 50×75mm — ext left",
-            "material": "Solid timber",
+            "part": f"Apron {APRON_THICKNESS}×75mm — uitbouw links",
+            "material": "Beuken gestoomd",
             "qty": 1,
             "width_mm": APRON_THICKNESS,
-            "depth_mm": 75,
+            "depth_mm": APRON_HEIGHT,
             "length_mm": round(ext_left_span_y + LEG_DEPTH),
-            "note": "Ext-left side, top rail",
+            "note": "Uitbouw linkerzijde, bovenste regel",
         },
         # Wall beam
         {
-            "part": "Wall beam 75×75mm",
-            "material": "Solid timber",
+            "part": f"Wandbalk {WALL_BEAM_WIDTH}×{WALL_BEAM_HEIGHT}mm",
+            "material": "Eiken balk",
             "qty": 1,
-            "width_mm": 75,
-            "depth_mm": 75,
+            "width_mm": WALL_BEAM_WIDTH,
+            "depth_mm": WALL_BEAM_HEIGHT,
             "length_mm": WALL_BEAM_LENGTH,
-            "note": "Wall-mounted back beam; lag-screw to wall",
+            "note": "Wandgemonteerde achterbalk; ankerbouten in muur",
         },
         # Twinset front mounting rails (bottom + top)
         {
-            "part": "Slat mounting rail 50×75mm — front",
-            "material": "Solid timber",
+            "part": f"Montageregel {STRETCHER_WIDTH}×75mm — voorzijde",
+            "material": "Beuken gestoomd",
             "qty": 2,
             "width_mm": STRETCHER_WIDTH,
-            "depth_mm": 75,
+            "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(front_rail_span),
-            "note": "Bottom + top rails for front slat wall",
+            "note": "Onder + boven rail voor lattenwand voorzijde",
         },
         # Right side top rail
         {
-            "part": "Rail 50×75mm — right side top",
-            "material": "Solid timber",
+            "part": f"Rail {STRETCHER_WIDTH}×75mm — rechterzijde boven",
+            "material": "Beuken gestoomd",
             "qty": 1,
             "width_mm": STRETCHER_WIDTH,
-            "depth_mm": 75,
+            "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(right_rail_span),
-            "note": "Top rail, right side of twinset enclosure",
+            "note": "Bovenste rail, rechterzijde twinset nis",
         },
         # Tabletop
         {
-            "part": "Tabletop panel",
-            "material": "40mm solid timber / engineered board",
+            "part": "Tafelblad (L-vorm)",
+            "material": f"Beuken gestoomd {TABLE_THICKNESS}mm (edge-glued)",
             "qty": 1,
             "width_mm": TABLE_LENGTH,
-            "depth_mm": TABLE_WIDTH + EXT_DEPTH,  # full L-shape span
+            "depth_mm": TABLE_WIDTH + EXT_DEPTH,
             "length_mm": TABLE_THICKNESS,
-            "note": "L-shaped top, 2700×1000mm — see part drawing",
+            "note": f"L-vorm {TABLE_LENGTH}×{TABLE_WIDTH}+uitbouw {EXT_LENGTH}×{EXT_DEPTH}mm — zie tekening",
         },
         # Front slats
         {
