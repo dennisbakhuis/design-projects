@@ -1,12 +1,12 @@
 # Bestelbon — Fijn Hout Drenthe
 ## Werkbank v2
 
-**Leverancier**  
-Fijn Hout Drenthe — Houthandel van der Horst BV  
-Veilingstraat 46, 7833 HN Nieuw Amsterdam  
+**Leverancier**
+Fijn Hout Drenthe — Houthandel van der Horst BV
+Veilingstraat 46, 7833 HN Nieuw Amsterdam
 Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
-**Prijslijst:** 19 november 2025  
+**Prijslijst:** 19 november 2025
 **Ontwerp:** werkbench_v2 — blad 2700×800 mm + uitbouw 780×200 mm, poten 960 mm hoog
 
 ---
@@ -129,16 +129,3 @@ Vraag bij bestelling of Fijn Hout Drenthe de volgende bewerkingen kan uitvoeren
 1. **Splijten constructieplanken (C):** 2 planken van 150 mm → elk 2 stroken van ± 73 mm
 2. **Optioneel — stroken latten (D):** planken van 200 mm → 10 stroken per plank à 20 mm breed
 3. **Optioneel — herscheuren latten (D):** 27 mm → 15 mm dikte
-
----
-
-## Niet opgenomen in deze bestelling
-
-De onderstaande onderdelen zijn standaard bouwmaterialen (verkrijgbaar bij bouwmarkt):
-
-| Onderdeel                  | Aantal | Maat         | Opmerking                        |
-|----------------------------|--------|--------------|----------------------------------|
-| Houtschroeven (pocket)     | 60 st  | 50 mm        | Poot-naar-apron verbindingen     |
-| Ankerschroeven M10         | 6 st   | 120 mm       | Wandbalk aan metselwerk/stud     |
-| Houtschroeven lat-montage  | 172 st | 3,5 × 35 mm  | 2 per einde per lat (optioneel)  |
-| Houtlijm (D3/D4)           | 1 fl   | 750 ml       | Tafelblad verlijmen              |
