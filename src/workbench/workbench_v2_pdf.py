@@ -567,31 +567,36 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     fillet_r = 100 * scale
 
     # ── L-shape vertices ──────────────────────────────────────────────────
-    # Main body (800mm) at TOP, extension (200mm × EXT_LENGTH) at BOTTOM-RIGHT.
-    # Clockwise path from top-left:
-    #   A  top-left        (ox,              oy+draw_h)
-    #   B  top-right       (ox+draw_w,       oy+draw_h)
-    #   C  right-step      (ox+draw_w,       oy+ext_d)   ← right edge of extension
-    #   D  inner corner    (ox+draw_w-ext_l, oy+ext_d)   ← fillet here (inside corner at 800mm)
-    #   E  step bottom     (ox+draw_w-ext_l, oy)          ← sharp corner
-    #   F  bottom-left     (ox,              oy)
+    # Correct 6-point L boundary: main body (800mm) TOP, extension BOTTOM-RIGHT.
+    #
+    #  A ────────────────────────── B
+    #  |   MAIN BODY (800mm)       |
+    #  |   2700mm wide             |
+    #  G ──────────── D ~~~~~~~~~~~|  ← 800mm from top; fillet at D
+    #                 |  EXTENSION |
+    #                 E ───────────C_ext
+    #
+    #   A = top-left        (ox,              oy+draw_h)
+    #   B = top-right       (ox+draw_w,       oy+draw_h)
+    #   C_ext = ext b-right (ox+draw_w,       oy)            ← right edge goes full depth
+    #   E = ext b-left/step (ox+draw_w-ext_l, oy)            ← sharp corner
+    #   D = inside corner   (ox+draw_w-ext_l, oy+ext_d)      ← FILLET HERE
+    #   G = main body b-l   (ox,              oy+ext_d)
 
-    A = (ox,                  oy + draw_h)
-    B = (ox + draw_w,         oy + draw_h)
-    C = (ox + draw_w,         oy + ext_d)
-    D = (ox + draw_w - ext_l, oy + ext_d)   # inside corner — has fillet
-    E_corner = (ox + draw_w - ext_l, oy)
-    F = (ox,                  oy)
+    A     = (ox,                  oy + draw_h)
+    B     = (ox + draw_w,         oy + draw_h)
+    C_ext = (ox + draw_w,         oy)               # ext bottom-right
+    E_    = (ox + draw_w - ext_l, oy)               # ext bottom-left (sharp corner)
+    D     = (ox + draw_w - ext_l, oy + ext_d)       # inside corner → fillet
+    G     = (ox,                  oy + ext_d)        # main body bottom-left
 
-    # Fillet at D (inside corner of L):
-    # Path arrives going LEFT (C→D), departs going DOWN (D→E).
-    # Arc is tangent to:
-    #   - horizontal C-D line from the RIGHT at (D[0]+fillet_r, oy+ext_d)  → 90° North
-    #   - vertical   D-E line from ABOVE  at (D[0],           oy+ext_d-fillet_r) → 180° West
-    # Arc centre = (D[0]+fillet_r, oy+ext_d-fillet_r) — inside the empty notch space.
-    # Sweep: CCW from 90° (North) by +90° → arrives at 180° (West).
-    arc_cx = D[0] + fillet_r
-    arc_cy = oy + ext_d - fillet_r
+    # Fillet at D: path arrives going UP (E→D), departs going LEFT (D→G).
+    # Arc centre inside shape = (D[0]-fillet_r, D[1]-fillet_r)
+    # Start tangent (East, on E→D going UP): (D[0],          D[1]-fillet_r)  → 0°
+    # End   tangent (North, on D→G going LEFT): (D[0]-fillet_r, D[1])        → 90°
+    # Sweep: CCW from 0° (East) +90° → 90° (North)
+    arc_cx = D[0] - fillet_r
+    arc_cy = D[1] - fillet_r   # = oy + ext_d - fillet_r
 
     c.setStrokeColor(colors.HexColor("#222222"))
     c.setFillColor(colors.HexColor("#f0e8d8"))
@@ -600,46 +605,47 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     p = c.beginPath()
     p.moveTo(*A)
     p.lineTo(*B)
-    p.lineTo(*C)
-    p.lineTo(D[0] + fillet_r, oy + ext_d)    # stop at arc-start tangent (fillet_r before D)
+    p.lineTo(*C_ext)                              # right edge: full depth to bottom
+    p.lineTo(*E_)                                 # extension bottom: left to step
+    p.lineTo(D[0], D[1] - fillet_r)              # step: up to arc start (East tangent)
     p.arcTo(arc_cx - fillet_r, arc_cy - fillet_r,
             arc_cx + fillet_r, arc_cy + fillet_r,
-            90, 90)                           # CCW from North (90°) +90° → West (180°)
-    # now at tangent end: (D[0], oy+ext_d-fillet_r)
-    p.lineTo(*E_corner)                       # straight down to sharp bottom corner
-    p.lineTo(*F)                              # left to bottom-left
-    p.lineTo(*A)                              # up to top-left
+            0, 90)                               # CCW East(0°) → North(90°)
+    # now at North tangent: (D[0]-fillet_r, D[1]) = (arc_cx, oy+ext_d)
+    p.lineTo(*G)                                  # main body bottom, going left
+    p.lineTo(*A)                                  # left edge, going up
     p.close()
     c.drawPath(p, fill=1, stroke=1)
 
-    # ── Extension boundary line ────────────────────────────────────────────
-    # Draw a solid dark line across the full drawing width at y = oy+ext_d.
-    # This marks the seam between the 4 main planks and the extension plank.
+    # ── Extension boundary highlight ─────────────────────────────────────
+    # Solid line at y=oy+ext_d from left edge to inside corner (G→D arc tangent).
+    # Shows the seam between main planks and extension plank.
     c.setStrokeColor(colors.HexColor("#444444"))
     c.setLineWidth(1.0)
-    c.line(ox, oy + ext_d, ox + draw_w, oy + ext_d)
+    c.line(G[0], G[1], arc_cx, G[1])   # G to fillet tangent end
 
     # ── Dimension lines ───────────────────────────────────────────────────
-    # Overall length (top, above shape)
+    # Overall length (top)
     draw_dimension_line(c, A[0], A[1], B[0], B[1],
                         f"{TABLE_LENGTH} mm", side="top", offset=7*mm)
-    # Total depth (left side, F→A)
-    draw_dimension_line(c, F[0], F[1], A[0], A[1],
-                        f"{TABLE_WIDTH + EXT_DEPTH} mm", side="left", offset=9*mm)
-    # Main body depth (right side, B→C)
-    draw_dimension_line(c, B[0], B[1], C[0], C[1],
+    # Left depth: G→A = 800mm (main body only)
+    draw_dimension_line(c, G[0], G[1], A[0], A[1],
+                        f"{TABLE_WIDTH} mm", side="left", offset=9*mm)
+    # Right depth upper: B down to C_ext level at oy+ext_d = 800mm
+    C_step = (ox + draw_w, oy + ext_d)
+    draw_dimension_line(c, B[0], B[1], C_step[0], C_step[1],
                         f"{TABLE_WIDTH} mm", side="right", offset=9*mm)
-    # Extension depth (right side, C→bottom)
-    draw_dimension_line(c, C[0], C[1], ox + draw_w, oy,
+    # Right depth lower: ext_d = 200mm
+    draw_dimension_line(c, C_step[0], C_step[1], C_ext[0], C_ext[1],
                         f"{EXT_DEPTH} mm", side="right", offset=9*mm)
-    # Extension width (bottom, D→right edge at same Y)
-    draw_dimension_line(c, D[0], oy + ext_d, C[0], oy + ext_d,
+    # Extension width (bottom, E→C_ext)
+    draw_dimension_line(c, E_[0], E_[1], C_ext[0], E_[1],
                         f"{EXT_LENGTH} mm", side="bottom", offset=7*mm)
 
-    # Fillet label — in the empty notch, just right of the arc
+    # Fillet label — just below D, in the notch area
     c.setFont("Helvetica", 7)
     c.setFillColor(colors.HexColor("#555555"))
-    c.drawString(D[0] + fillet_r + 2 * mm, oy + ext_d - fillet_r - 4 * mm, f"R {FILLET_RADIUS} mm")
+    c.drawString(D[0] + 2 * mm, D[1] - fillet_r - 4 * mm, f"R {FILLET_RADIUS} mm")
 
     # ── Plank division lines ──────────────────────────────────────────────
     # Main body: 4 planks × 200mm, measured from TOP of main body downward.
@@ -654,9 +660,9 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     c.setDash(4, 3)
 
     for i in range(1, N_PLANKS):
-        # Lines go from bottom of main body (oy+ext_d) upward in 200mm steps
-        py = oy + ext_d + i * PLANK_W_MM * scale
-        c.line(ox, py, ox + draw_w, py)   # full width
+        # Lines go from bottom of main body (G[1]=oy+ext_d) upward in 200mm steps
+        py = G[1] + i * PLANK_W_MM * scale
+        c.line(ox, py, ox + draw_w, py)   # full width (all within main body ✓)
 
     c.setDash()
     c.setLineWidth(0.5)
@@ -665,23 +671,23 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     c.setFont("Helvetica", 6.5)
     c.setFillColor(plank_color)
     for i in range(N_PLANKS):
-        # Band i: from oy+ext_d + i*200*scale  to  oy+ext_d + (i+1)*200*scale
-        label_y = oy + ext_d + i * PLANK_W_MM * scale + (PLANK_W_MM * scale / 2)
+        # Band i goes from G[1] + i*200*scale to G[1] + (i+1)*200*scale
+        label_y = G[1] + i * PLANK_W_MM * scale + (PLANK_W_MM * scale / 2)
         c.drawString(ox + 2 * mm, label_y - 2 * mm, f"{PLANK_W_MM} mm")
 
-    # Extension label
+    # Extension label (centred in extension rectangle)
     c.setFont("Helvetica", 6.5)
     c.setFillColor(colors.HexColor("#444444"))
-    ext_label_x = ox + draw_w - ext_l / 2 + ext_l / 2   # centre of extension
-    c.drawCentredString(ox + draw_w - ext_l / 2, oy + ext_d / 2, "uitbouw")
-    c.drawCentredString(ox + draw_w - ext_l / 2, oy + ext_d / 2 - 4 * mm,
-                        f"{EXT_LENGTH:.0f}×{EXT_DEPTH} mm")
+    ext_cx = E_[0] + ext_l / 2   # centre X of extension = D[0] + ext_l/2
+    ext_cy = oy + ext_d / 2      # centre Y of extension
+    c.drawCentredString(ext_cx, ext_cy + 2 * mm, "uitbouw")
+    c.drawCentredString(ext_cx, ext_cy - 2 * mm, f"{EXT_LENGTH:.0f}×{EXT_DEPTH} mm")
 
-    # Material callout (centre-left of main body, away from extension)
+    # Material callout (centre-left of main body, well away from extension)
     c.setFont("Helvetica", 7)
     c.setFillColor(colors.HexColor("#222222"))
     note_x = ox + (draw_w - ext_l) / 2
-    note_y = oy + ext_d + main_d / 2
+    note_y = G[1] + main_d / 2
     c.drawCentredString(note_x, note_y + 4 * mm, f"Dikte: {TABLE_THICKNESS} mm")
     c.drawCentredString(note_x, note_y,           "Beuken gestoomd 52 mm")
     c.drawCentredString(note_x, note_y - 4 * mm, "Edge-glued · 4 planken")
