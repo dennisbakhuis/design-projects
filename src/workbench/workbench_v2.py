@@ -7,7 +7,7 @@ from cadquery import Assembly, Color, Location, Vector
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from helper_objects import make_d12_twinset
-from helper_objects.d12_tanks.d12_tanks import CYLINDER_SPACING, TANK_DIAMETER
+from helper_objects.d12_twinset import CYLINDER_SPACING, TANK_DIAMETER
 from helper_objects.hbm_tool_cart import make_hbm_tool_cart
 
 # ── Design parameters ────────────────────────────────────────────────────────
