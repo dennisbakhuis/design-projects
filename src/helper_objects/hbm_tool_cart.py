@@ -120,19 +120,9 @@ def make_hbm_tool_cart(
              loc=Location(Vector(0, 0, body_z)))
 
     # ── Drawer layout ──────────────────────────────────────────────────────────
-    # Top large drawer: full width, directly below wood top
-    # Shaved 8mm top + 8mm bottom to avoid clipping with top and lower drawers
-    top_la_h = 92    # was 108, reduced to avoid clipping
-    top_la_z = wheel_height + body_h - top_la_h - 8  # 8mm gap below wood top
-    top_la = cq.Workplane("XY").box(body_length - 10, 6, top_la_h)
-    assy.add(top_la, name="drawer_top_large", color=Color(0.25, 0.25, 0.25, 1.0),
-             loc=Location(Vector(0, -depth / 2 - 3, top_la_z + top_la_h / 2)))
-
-    # 3 columns below the top drawer
-    # Left: 330mm, Centre: 570mm, Right: 330mm  → ~1230mm total (fits within body)
-    col_specs = [(-450, 330), (0, 570), (450, 330)]   # (x_centre, width)
-    col_height = body_h - top_la_h                     # remaining height for 3 cols
-    row_heights = [45, 150, 45, 150, 45, 200]          # 6 rows, ~635mm total
+    # 3 columns: Left 330mm, Centre 570mm, Right 330mm → total span 1230mm
+    col_specs   = [(-450, 330), (0, 570), (450, 330)]
+    row_heights = [45, 150, 45, 150, 45, 200]   # 6 rows = 635mm total
 
     z_cursor = wheel_height
     for row_idx, rh in enumerate(row_heights):
@@ -144,7 +134,17 @@ def make_hbm_tool_cart(
                 color=Color(0.25, 0.25, 0.25, 1.0),
                 loc=Location(Vector(col_x, -depth / 2 - 3, z_cursor + rh / 2)),
             )
-        z_cursor += rh
+        z_cursor += rh   # z_cursor now = wheel_height + 635 = 785mm
+
+    # Top large drawer: sits above 3 columns, below wood top
+    # Columns end at z=785, wood top bottom at z=880 → 95mm gap
+    # Use 85mm height with 5mm clearance top and bottom
+    col_total_w = 330 + 570 + 330   # 1230mm — match column span exactly
+    top_la_h    = 85
+    top_la_z    = z_cursor + 5      # 5mm gap above columns
+    top_la = cq.Workplane("XY").box(col_total_w, 6, top_la_h)
+    assy.add(top_la, name="drawer_top_large", color=Color(0.25, 0.25, 0.25, 1.0),
+             loc=Location(Vector(0, -depth / 2 - 3, top_la_z + top_la_h / 2)))
 
     # ── Wood top ──────────────────────────────────────────────────────────────
     # Top overhangs body slightly on all sides; extends full total_length in X
@@ -166,32 +166,33 @@ def make_hbm_tool_cart(
                  color=Color(0.15, 0.15, 0.15, 1.0),
                  loc=Location(Vector(wx, wy, 0)))
 
-    # ── Handle: vertical D-loop on RIGHT END panel ───────────────────────────
-    # Extends handle_ext mm beyond right end of body (+X direction)
-    handle_z_bot = wheel_height + body_h * 0.50
-    handle_z_top = wheel_height + body_h * 0.78
+    # ── Handle: D-loop on RIGHT END panel ────────────────────────────────────
+    # Two horizontal arms extend in +X, connected by vertical grip bar
+    # Raised: 62%–82% of body height
+    handle_z_bot = wheel_height + body_h * 0.62   # ~603 mm
+    handle_z_top = wheel_height + body_h * 0.82   # ~749 mm
     handle_h     = handle_z_top - handle_z_bot
-    grip_reach   = handle_ext
+    grip_reach   = handle_ext                       # 145 mm
 
+    # Arms: tubes from body right face (+X) outward by grip_reach
     arm_bottom = (
         cq.Workplane("YZ")
-        .center(0, handle_z_bot)
         .circle(14)
         .extrude(grip_reach)
-        .translate((body_length / 2, 0, 0))   # RIGHT side: +X
+        .translate((body_length / 2, 0, handle_z_bot))
     )
     arm_top = (
         cq.Workplane("YZ")
-        .center(0, handle_z_top)
         .circle(14)
         .extrude(grip_reach)
-        .translate((body_length / 2, 0, 0))
+        .translate((body_length / 2, 0, handle_z_top))
     )
+    # Grip bar: vertical tube at arm tips, symmetric ±100mm in Y
     grip = (
         cq.Workplane("XZ")
         .center(body_length / 2 + grip_reach, handle_z_bot + handle_h / 2)
         .circle(14)
-        .extrude(200)
+        .extrude(100, both=True)   # symmetric: ±100 mm in Y
     )
     handle_shape = arm_bottom.union(arm_top).union(grip)
     assy.add(handle_shape, name="handle", color=Color(0.78, 0.78, 0.78, 1.0),
