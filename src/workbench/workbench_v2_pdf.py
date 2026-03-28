@@ -596,7 +596,7 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     arc_cy = E_corner[1] + fillet_r
     p.arcTo(arc_cx - fillet_r, arc_cy - fillet_r,
             arc_cx + fillet_r, arc_cy + fillet_r,
-            180, -90)  # from 270° to 180° = inside corner arc
+            0, -90)  # start East (directly below D), sweep CW to South
     p.lineTo(*F)
     p.lineTo(*A)
     p.close()
