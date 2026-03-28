@@ -25,7 +25,7 @@ from workbench.workbench_v2 import (
     make_workbench, make_workbench_stage, get_bom, make_tabletop,
     TABLE_LENGTH, TABLE_WIDTH, LEG_HEIGHT, TABLE_THICKNESS,
     LEG_WIDTH, LEG_DEPTH, STRETCHER_WIDTH, APRON_THICKNESS, APRON_HEIGHT,
-    STRETCHER_HEIGHT, EXT_DEPTH, EXT_LENGTH, FILLET_RADIUS, SLAT_WIDTH, SLAT_DEPTH,
+    STRETCHER_HEIGHT, STRETCHER_Z, EXT_DEPTH, EXT_LENGTH, FILLET_RADIUS, SLAT_WIDTH, SLAT_DEPTH,
     TENON_THICKNESS, TENON_HEIGHT, TENON_LENGTH, MORTISE_DEPTH,
 )
 
@@ -79,6 +79,7 @@ def svg_to_rl(svg_path, target_w, target_h):
 
 def place_drawing(c, rl_drawing, area_x, area_y, area_w, area_h, label=""):
     if rl_drawing is None:
+        ox, oy, dw, dh = area_x, area_y, area_w, area_h
         c.setFont("Helvetica", 9)
         c.drawCentredString(area_x + area_w / 2, area_y + area_h / 2, "[view unavailable]")
     else:
@@ -96,6 +97,7 @@ def place_drawing(c, rl_drawing, area_x, area_y, area_w, area_h, label=""):
         c.setFont("Helvetica-Bold", 8)
         c.setFillColor(colors.black)
         c.drawCentredString(area_x + area_w / 2, area_y + 3 * mm, label)
+    return ox, oy, dw, dh
 
 
 def draw_dimension_line(c, x1, y1, x2, y2, text, side="bottom", offset=8*mm, tick=3*mm):
@@ -288,8 +290,30 @@ def page_elevations(c, page_num, total_pages, front_rl, side_rl):
     half_w = DRAW_W / 2 - 2 * mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(MARGIN, content_y + content_h + 2 * mm, "ELEVATIONS")
-    place_drawing(c, front_rl, MARGIN, content_y + 10 * mm, half_w, content_h - 10 * mm, "FRONT ELEVATION")
-    place_drawing(c, side_rl, MARGIN + half_w + 4 * mm, content_y + 10 * mm, half_w, content_h - 10 * mm, "RIGHT SIDE ELEVATION")
+
+    fx, fy, fw, fh = place_drawing(c, front_rl, MARGIN, content_y + 10 * mm, half_w, content_h - 10 * mm, "FRONT ELEVATION")
+    sx, sy, sw, sh = place_drawing(c, side_rl, MARGIN + half_w + 4 * mm, content_y + 10 * mm, half_w, content_h - 10 * mm, "RIGHT SIDE ELEVATION")
+
+    total_h = LEG_HEIGHT + TABLE_THICKNESS
+
+    # Front elevation annotations
+    draw_dimension_line(c, fx, fy, fx + fw, fy,
+                        f"{TABLE_LENGTH} mm", side="bottom", offset=7*mm)
+    draw_dimension_line(c, fx + fw, fy, fx + fw, fy + fh,
+                        f"{total_h} mm", side="right", offset=9*mm)
+    leg_y = fy + fh * LEG_HEIGHT / total_h
+    draw_dimension_line(c, fx + fw, fy, fx + fw, leg_y,
+                        f"{LEG_HEIGHT} mm", side="right", offset=20*mm)
+    str_y = fy + fh * STRETCHER_Z / total_h
+    draw_dimension_line(c, fx, fy, fx, str_y,
+                        f"{STRETCHER_Z} mm", side="left", offset=9*mm)
+
+    # Side elevation annotations
+    draw_dimension_line(c, sx, sy, sx + sw, sy,
+                        f"{TABLE_WIDTH} mm", side="bottom", offset=7*mm)
+    draw_dimension_line(c, sx + sw, sy, sx + sw, sy + sh,
+                        f"{total_h} mm", side="right", offset=9*mm)
+
     draw_title_block(c, page_num, total_pages, "Elevations — Front & Right Side")
     c.showPage()
 
@@ -300,8 +324,21 @@ def page_plan_iso(c, page_num, total_pages, top_rl, iso_rl):
     half_w = DRAW_W / 2 - 2 * mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(MARGIN, content_y + content_h + 2 * mm, "PLAN & 3D VIEW")
-    place_drawing(c, top_rl, MARGIN, content_y + 10 * mm, half_w, content_h - 10 * mm, "TOP PLAN")
+
+    tx, ty, tw, th = place_drawing(c, top_rl, MARGIN, content_y + 10 * mm, half_w, content_h - 10 * mm, "TOP PLAN")
     place_drawing(c, iso_rl, MARGIN + half_w + 4 * mm, content_y + 10 * mm, half_w, content_h - 10 * mm, "ISOMETRIC VIEW")
+
+    # Top plan annotations
+    draw_dimension_line(c, tx, ty, tx + tw, ty,
+                        f"{TABLE_LENGTH} mm", side="bottom", offset=7*mm)
+    draw_dimension_line(c, tx, ty, tx, ty + th,
+                        f"{TABLE_WIDTH} mm", side="left", offset=9*mm)
+    draw_dimension_line(c, tx + tw, ty, tx + tw, ty + th,
+                        f"{TABLE_WIDTH} mm", side="right", offset=9*mm)
+    ext_x = tx + tw * (1 - EXT_LENGTH / TABLE_LENGTH)
+    draw_dimension_line(c, ext_x, ty, tx + tw, ty,
+                        f"{EXT_LENGTH} mm", side="bottom", offset=18*mm)
+
     draw_title_block(c, page_num, total_pages, "Plan & Isometric")
     c.showPage()
 
@@ -312,12 +349,12 @@ IKEA_STEPS = [
         "title": "Step 1 — Install All Legs",
         "icon": "1",
         "bullets": [
-            "Cut all legs to 960 mm from 75×75 mm timber.",
+            "Cut all legs to 970 mm from 75×75 mm timber.",
             "Mark leg positions on the floor using the plan drawing.",
             "Three wall legs will be bolted directly to the wall — set aside.",
             "Stand all floor legs upright. Check plumb with a spirit level.",
         ],
-        "parts": ["Leg 75×75 mm  ×  8 total"],
+        "parts": ["Leg 75×75 mm  ×  6 total"],
     },
     {
         "stage": 1,
@@ -340,7 +377,7 @@ IKEA_STEPS = [
         "icon": "3",
         "bullets": [
             "Cut aprons from 50×75 mm timber — same lengths as stretchers.",
-            "Fix aprons at 885 mm from floor (centre), flush with leg inner faces.",
+            "Fix aprons at 933 mm from floor (centre), flush with leg inner faces.",
             "Mount wall beam (75×75 mm) to wall at apron height using M10×120 mm lag screws.",
             "Space lag screws at 600 mm centres — use rawlplugs in masonry.",
             "Bolt back apron to face of wall beam.",
@@ -370,7 +407,7 @@ IKEA_STEPS = [
         "bullets": [
             "Cut front rails and right-side rail from 50×75 mm timber (see BOM).",
             "Position rails flush with leg inner faces — check alignment carefully.",
-            "Slat wall sits 15 mm inside the leg outer face — rails go directly behind.",
+            "Slat wall sits 10 mm inside the leg outer face — rails go directly behind.",
             "Fix rails with 2× pocket screws per leg joint.",
         ],
         "parts": [
@@ -480,7 +517,7 @@ def page_details(c, page_num, total_pages):
         ("Overall height", f"{LEG_HEIGHT + TABLE_THICKNESS} mm"),
         ("Legs", "75 × 75 mm solid timber"),
         ("Stretchers", "50 × 75 mm (at 150 mm from floor)"),
-        ("Aprons", "50 × 75 mm (at 885 mm from floor)"),
+        ("Aprons", "50 × 75 mm (at 933 mm from floor)"),
         ("Wall beam", "75 × 75 mm, wall-anchored"),
         ("Slats", "20 × 15 mm, 10 mm gaps"),
     ]
@@ -510,7 +547,7 @@ def page_details(c, page_num, total_pages):
             "Pre-drill and countersink to avoid splitting.",
         ]),
         ("2. WALL BEAM TO WALL", [
-            "75×75 mm beam at apron height (885 mm).",
+            "75×75 mm beam at apron height (933 mm).",
             "M10×120 mm lag screws at 600 mm spacing.",
             "Use rawlplugs / expansion anchors for masonry.",
         ]),

@@ -295,9 +295,9 @@ def get_bom():
             "part": "Wall beam 75×75mm",
             "material": "Solid timber",
             "qty": 1,
-            "width_mm": WALL_BEAM_LENGTH,
+            "width_mm": 75,
             "depth_mm": 75,
-            "length_mm": 75,
+            "length_mm": WALL_BEAM_LENGTH,
             "note": "Wall-mounted back beam; lag-screw to wall",
         },
         # Twinset front mounting rails (bottom + top)
