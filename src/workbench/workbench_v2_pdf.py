@@ -393,6 +393,12 @@ def page_elevations(c, page_num, total_pages, front_rl, side_rl, front_svg, side
     seg_b_depth = round((wall_back_y_val - LEG_DEPTH / 2) - (ext_front_leg_y + LEG_DEPTH / 2))
     draw_dimension_line(c, sf_inner_x, s0_y, sb_inner_x, s0_y,
                         f"{seg_b_depth} mm  (seg B — diepte)", side="bottom", offset=7*mm)
+    # Total depth at top of side view (outside faces of front & back legs)
+    sf_outer_x, stop_top_y = sc(ext_front_y, total_h)
+    sb_outer_x, _          = sc(TABLE_WIDTH / 2, total_h)
+    total_depth = TABLE_WIDTH + EXT_DEPTH
+    draw_dimension_line(c, sf_outer_x, stop_top_y, sb_outer_x, stop_top_y,
+                        f"{total_depth} mm", side="top", offset=7*mm)
     # Overall height on right side (outside — away from page centre)
     draw_dimension_line(c, sb_inner_x, s0_y, sb_inner_x, stop_y,
                         f"{total_h} mm", side="right", offset=9*mm)
