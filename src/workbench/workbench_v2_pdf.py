@@ -624,15 +624,50 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     c.setFillColor(colors.HexColor("#555555"))
     c.drawString(arc_cx + 2 * mm, arc_cy + 2 * mm, f"R {100} mm")
 
-    # Thickness label (callout)
+    # ── Plank division lines (main body: 4 × 200 mm planks) ──────────────
+    # Planks run the full 2700mm in X, each 200mm wide in Y.
+    # Draw dashed lines at 200, 400, 600mm from the front (bottom of drawing).
+    PLANK_W_MM   = 200           # ordered: 200mm wide planks
+    N_PLANKS     = TABLE_WIDTH // PLANK_W_MM   # = 4
+    plank_line_color = colors.HexColor("#8B6914")   # warm brown, visible on beige
+
+    c.setStrokeColor(plank_line_color)
+    c.setLineWidth(0.7)
+    c.setDash(4, 3)              # dashed: 4pt on, 3pt off
+
+    for i in range(1, N_PLANKS):
+        py = oy + i * PLANK_W_MM * scale
+        # Full length of main body
+        c.line(ox, py, ox + draw_w, py)
+
+    # Extension planks: 4 × 200mm wide, running 780mm in X.
+    # Grain runs in X (same direction as main planks).
+    # Extension Y span: oy to oy + ext_d (= 200mm, one plank deep).
+    # Show extension plank joints in X direction (4 pieces side-by-side in X).
+    ext_piece_w = EXT_LENGTH / 4   # ≈195mm each
+    for i in range(1, 4):
+        ex_x = (ox + draw_w - ext_l) + i * ext_piece_w * scale
+        c.line(ex_x, oy, ex_x, oy + ext_d)
+
+    c.setDash()   # reset to solid
+    c.setLineWidth(0.5)
+
+    # Plank width label (left margin, first plank)
+    c.setFont("Helvetica", 6.5)
+    c.setFillColor(plank_line_color)
+    for i in range(N_PLANKS):
+        label_y = oy + i * PLANK_W_MM * scale + (PLANK_W_MM * scale / 2)
+        c.drawString(ox + 2 * mm, label_y - 2 * mm, f"{PLANK_W_MM}")
+
+    # Thickness / material callout (centre of main body)
     c.setFont("Helvetica", 7)
     c.setFillColor(colors.HexColor("#222222"))
-    note_x = ox + draw_w / 2
-    note_y = oy + draw_h / 2
-    c.drawCentredString(note_x, note_y, f"Thickness: {TABLE_THICKNESS} mm")
-    c.drawCentredString(note_x, note_y - 4 * mm, "Material: 40 mm solid timber")
-    c.drawCentredString(note_x, note_y - 8 * mm, "or 40 mm engineered board")
-    c.drawCentredString(note_x, note_y - 12 * mm, "Qty: 1 off")
+    note_x = ox + (draw_w - ext_l) / 2
+    note_y = oy + main_d / 2
+    c.drawCentredString(note_x, note_y + 4 * mm, f"Dikte: {TABLE_THICKNESS} mm")
+    c.drawCentredString(note_x, note_y,           "Beuken gestoomd 52 mm")
+    c.drawCentredString(note_x, note_y - 4 * mm, "Edge-glued · 4 planken")
+    c.drawCentredString(note_x, note_y - 8 * mm, f"{N_PLANKS} × {PLANK_W_MM} × 2700 mm")
 
     # Panel border
     c.setStrokeColor(colors.HexColor("#aaaaaa"))
