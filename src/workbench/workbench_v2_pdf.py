@@ -30,6 +30,7 @@ from workbench.workbench_v2 import (
     STRETCHER_HEIGHT, STRETCHER_Z, EXT_DEPTH, EXT_LENGTH, FILLET_RADIUS, SLAT_WIDTH, SLAT_DEPTH,
     TENON_THICKNESS, TENON_HEIGHT, TENON_LENGTH, MORTISE_DEPTH,
     left_x, right_x, ext_left_leg_x,
+    ext_front_y, leg_inset_y,
 )
 
 OUTPUT_DIR = Path(__file__).parent
@@ -344,29 +345,32 @@ def page_elevations(c, page_num, total_pages, front_rl, side_rl, front_svg, side
 
     # ── Front elevation: model horiz=X, model vert=Z ─────────────────────
     fc = make_coord_converter(front_svg, front_rl, fx, fy)
-    fl_x,  f0_y    = fc(-half_L, 0)
-    fr_x,  _       = fc(+half_L, 0)
-    _,     ftop_y  = fc(0, total_h)
-    _,     fleg_y  = fc(0, LEG_HEIGHT)
-    _,     fstr_y  = fc(0, STRETCHER_Z)
+    fl_x,  f0_y      = fc(-half_L, 0)
+    fr_x,  _         = fc(+half_L, 0)
+    _,     ftop_y    = fc(0, total_h)
+    _,     fleg_y    = fc(0, LEG_HEIGHT)
+    _,     fstr_bot_y = fc(0, STRETCHER_Z - STRETCHER_HEIGHT / 2)  # bottom of stretcher
 
-    draw_dimension_line(c, fl_x, f0_y, fr_x, f0_y,
-                        f"{TABLE_LENGTH} mm", side="bottom", offset=7*mm)
+    # Overall width at TOP of tabletop
+    ftop_l_x, ftop_top_y = fc(-half_L, total_h)
+    ftop_r_x, _          = fc(+half_L, total_h)
+    draw_dimension_line(c, ftop_l_x, ftop_top_y, ftop_r_x, ftop_top_y,
+                        f"{TABLE_LENGTH} mm", side="top", offset=7*mm)
+    # Heights on right side (outside)
     draw_dimension_line(c, fr_x, f0_y, fr_x, ftop_y,
                         f"{total_h} mm", side="right", offset=9*mm)
     draw_dimension_line(c, fr_x, f0_y, fr_x, fleg_y,
                         f"{LEG_HEIGHT} mm", side="right", offset=20*mm)
-    draw_dimension_line(c, fl_x, f0_y, fl_x, fstr_y,
-                        f"{STRETCHER_Z} mm", side="left", offset=9*mm)
+    # Stretcher: floor → bottom of stretcher (left, outside)
+    draw_dimension_line(c, fl_x, f0_y, fl_x, fstr_bot_y,
+                        f"{round(STRETCHER_Z - STRETCHER_HEIGHT/2)} mm", side="left", offset=9*mm)
 
-    # ── Segment A and B (pootkant-tot-pootkant) ──────────────────────────
-    # Segment A: right face of front-left leg → left face of ext-front-left leg
+    # ── Segment A and B at floor level ───────────────────────────────────
     seg_a_x1, _ = fc(left_x + LEG_WIDTH / 2, 0)
     seg_a_x2, _ = fc(ext_left_leg_x - LEG_WIDTH / 2, 0)
     seg_a = round((ext_left_leg_x - LEG_WIDTH / 2) - (left_x + LEG_WIDTH / 2))
     draw_dimension_line(c, seg_a_x1, f0_y, seg_a_x2, f0_y,
                         f"{seg_a} mm  (seg A — kar)", side="bottom", offset=18*mm)
-    # Segment B: right face of ext-front-left leg → left face of ext-front-right leg
     seg_b_x1, _ = fc(ext_left_leg_x + LEG_WIDTH / 2, 0)
     seg_b_x2, _ = fc(right_x - LEG_WIDTH / 2, 0)
     seg_b = round((right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2))
@@ -374,14 +378,23 @@ def page_elevations(c, page_num, total_pages, front_rl, side_rl, front_svg, side
                         f"{seg_b} mm  (seg B — tanks)", side="bottom", offset=18*mm)
 
     # ── Side elevation: model horiz=Y (depth), model vert=Z ──────────────
-    sc = make_coord_converter(side_svg, side_rl, sx, sy)
-    sf_x, s0_y  = sc(-half_W, 0)
-    sb_x, _     = sc(+half_W, 0)
-    _,    stop_y = sc(0, total_h)
+    # Side view shows right side of workbench = segment B area
+    # model Y: ext_front_leg back face → wall_back front face
+    ext_front_leg_y = ext_front_y + leg_inset_y
+    wall_back_y_val  = TABLE_WIDTH / 2 - LEG_DEPTH / 2
 
-    draw_dimension_line(c, sf_x, s0_y, sb_x, s0_y,
-                        f"{TABLE_WIDTH} mm", side="bottom", offset=7*mm)
-    draw_dimension_line(c, sb_x, s0_y, sb_x, stop_y,
+    sc = make_coord_converter(side_svg, side_rl, sx, sy)
+
+    # Front & back leg inner faces for clear-span annotation
+    sf_inner_x, s0_y = sc(ext_front_leg_y + LEG_DEPTH / 2, 0)
+    sb_inner_x, _    = sc(wall_back_y_val  - LEG_DEPTH / 2, 0)
+    _,    stop_y     = sc(0, total_h)
+
+    seg_b_depth = round((wall_back_y_val - LEG_DEPTH / 2) - (ext_front_leg_y + LEG_DEPTH / 2))
+    draw_dimension_line(c, sf_inner_x, s0_y, sb_inner_x, s0_y,
+                        f"{seg_b_depth} mm  (seg B — diepte)", side="bottom", offset=7*mm)
+    # Overall height on right side (outside — away from page centre)
+    draw_dimension_line(c, sb_inner_x, s0_y, sb_inner_x, stop_y,
                         f"{total_h} mm", side="right", offset=9*mm)
 
     draw_title_block(c, page_num, total_pages, "Elevations — Front & Right Side")
@@ -419,10 +432,12 @@ def page_plan_iso(c, page_num, total_pages, top_rl, iso_rl, top_svg):
     ext_lx, _ = tc(+half_L - EXT_LENGTH, -half_W)
     draw_dimension_line(c, ext_lx, tf_y, ext_rx, tf_y,
                         f"{EXT_LENGTH} mm", side="bottom", offset=18*mm)
-    # Extension depth (right side, bottom section)
-    ext_back_y_val = -half_W + EXT_DEPTH     # top edge of extension in model Y
-    _, ext_fb_y = tc(+half_L, -half_W + EXT_DEPTH)
-    draw_dimension_line(c, ext_rx, tf_y, ext_rx, ext_fb_y,
+    # Extension depth (right side): from main-body front edge → extension front edge
+    # Main body front: model_y = -half_W = -400mm
+    # Extension front: model_y = -(half_W + EXT_DEPTH) = -600mm
+    ext_rx2, main_front_y = tc(+half_L, -half_W)
+    _,       ext_front_y_c = tc(+half_L, -(half_W + EXT_DEPTH))
+    draw_dimension_line(c, ext_rx2, main_front_y, ext_rx2, ext_front_y_c,
                         f"{EXT_DEPTH} mm", side="right", offset=9*mm)
 
     draw_title_block(c, page_num, total_pages, "Plan & Isometric")
