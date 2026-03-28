@@ -617,12 +617,15 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     p.close()
     c.drawPath(p, fill=1, stroke=1)
 
-    # ── Extension boundary highlight ─────────────────────────────────────
-    # Solid line at y=oy+ext_d from left edge to inside corner (G→D arc tangent).
-    # Shows the seam between main planks and extension plank.
-    c.setStrokeColor(colors.HexColor("#444444"))
+    # ── Extension boundary line ───────────────────────────────────────────
+    # Dashed line at y=oy+ext_d across the full shape width.
+    # Shows the seam between the 4 main planks and the extension plank.
+    # Drawn AFTER the fill so it is always visible on top.
+    c.setStrokeColor(colors.HexColor("#222222"))
     c.setLineWidth(1.0)
-    c.line(G[0], G[1], arc_cx, G[1])   # G to fillet tangent end
+    c.setDash(6, 3)
+    c.line(G[0], G[1], ox + draw_w, G[1])   # full width at y=ext_d
+    c.setDash()                              # reset
 
     # ── Dimension lines ───────────────────────────────────────────────────
     # Overall length (top)
