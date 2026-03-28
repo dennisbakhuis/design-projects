@@ -176,7 +176,7 @@ def make_hbm_tool_cart(
     # arm length = 100 mm, grip span = 160 mm, radius = 14 mm.
 
     arm_z      = wheel_height + body_h * 0.78   # ~720 mm from floor
-    arm_length = 100                             # protrusion in +X, mm
+    arm_length = 131                             # protrusion in +X, mm  (1465+131+14=1610 ✓)
     span_y     = 160                             # grip bar length in Y, mm
     r          = 14                              # tube radius, mm
 
