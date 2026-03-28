@@ -617,15 +617,14 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     p.close()
     c.drawPath(p, fill=1, stroke=1)
 
-    # ── Extension boundary line ───────────────────────────────────────────
-    # Dashed line at y=oy+ext_d across the full shape width.
-    # Shows the seam between the 4 main planks and the extension plank.
-    # Drawn AFTER the fill so it is always visible on top.
-    c.setStrokeColor(colors.HexColor("#222222"))
-    c.setLineWidth(1.0)
-    c.setDash(6, 3)
-    c.line(G[0], G[1], ox + draw_w, G[1])   # full width at y=ext_d
-    c.setDash()                              # reset
+    # ── Extension boundary line (same style as plank lines) ──────────────
+    # Drawn AFTER fill so it's always on top.
+    plank_color = colors.HexColor("#8B6914")
+    c.setStrokeColor(plank_color)
+    c.setLineWidth(0.7)
+    c.setDash(4, 3)
+    c.line(G[0], G[1], ox + draw_w, G[1])
+    c.setDash()
 
     # ── Dimension lines ───────────────────────────────────────────────────
     # Overall length (top)
@@ -988,15 +987,21 @@ def main():
     workbench = make_workbench(include_props=False)
     compound = workbench.toCompound()
 
+    # Separate model with props for the title page iso view
+    workbench_props = make_workbench(include_props=True)
+    compound_props = workbench_props.toCompound()
+
     front_comp = rotated(compound, (-1, 0, 0), 90)
     side_comp = rotated(front_comp, (0, -1, 0), 90)
     iso_comp = iso_compound(compound)
+    iso_comp_props = iso_compound(compound_props)
 
     print("Exporting orthographic SVGs...")
     top_svg = export_temp_svg(compound, "top", 1800, 1000)
     front_svg = export_temp_svg(front_comp, "front", 1800, 1000)
     side_svg = export_temp_svg(side_comp, "side", 1000, 1000)
     iso_svg = export_temp_svg(iso_comp, "iso", 1800, 1000)
+    iso_props_svg = export_temp_svg(iso_comp_props, "iso_props", 1800, 1000)
 
     print("Exporting assembly stage SVGs...")
     stage_svgs = []
@@ -1038,7 +1043,7 @@ def main():
     content_h = PAGE_H - content_y - MARGIN
 
     print("Converting SVGs to reportlab drawings...")
-    iso_rl = svg_to_rl(iso_svg, DRAW_W * 0.6, content_h)
+    iso_rl = svg_to_rl(iso_props_svg, DRAW_W * 0.6, content_h)   # title page: with props
     front_rl = svg_to_rl(front_svg, half_w - 4 * mm, content_h - 14 * mm)
     side_rl = svg_to_rl(side_svg, half_w - 4 * mm, content_h - 14 * mm)
     top_rl = svg_to_rl(top_svg, half_w - 4 * mm, content_h - 14 * mm)
