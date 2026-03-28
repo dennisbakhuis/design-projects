@@ -167,33 +167,41 @@ def make_hbm_tool_cart(
                  loc=Location(Vector(wx, wy, 0)))
 
     # ── Handle: D-loop on RIGHT END panel ────────────────────────────────────
-    # Two horizontal arms extend in +X, connected by vertical grip bar
-    # Raised: 62%–82% of body height
-    handle_z_bot = wheel_height + body_h * 0.62   # ~603 mm
-    handle_z_top = wheel_height + body_h * 0.82   # ~749 mm
-    handle_h     = handle_z_top - handle_z_bot
+    # Two HORIZONTAL arms (along X) + one VERTICAL grip bar (along Z)
+    # All built as explicit boxes so X/Y/Z orientation is unambiguous.
+    handle_z_bot = wheel_height + body_h * 0.62   # ~603 mm from floor
+    handle_z_top = wheel_height + body_h * 0.82   # ~749 mm from floor
+    handle_h     = handle_z_top - handle_z_bot     # ~146 mm
     grip_reach   = handle_ext                       # 145 mm
+    arm_s        = 25                               # arm cross-section (mm)
 
-    # Arms: tubes from body right face (+X) outward by grip_reach
+    # Arm bottom: box with long axis in X, centred at (body_right + reach/2, 0, z_bot)
+    #   X: from body_length/2  →  body_length/2 + grip_reach
+    #   Y: ±arm_s/2  (centred on cart Y-centre)
+    #   Z: centred at handle_z_bot
     arm_bottom = (
-        cq.Workplane("YZ")
-        .circle(14)
-        .extrude(grip_reach)
-        .translate((body_length / 2, 0, handle_z_bot))
+        cq.Workplane("XY")
+        .box(grip_reach, arm_s, arm_s)
+        .translate((body_length / 2 + grip_reach / 2, 0, handle_z_bot))
     )
+
+    # Arm top: same, at handle_z_top
     arm_top = (
-        cq.Workplane("YZ")
-        .circle(14)
-        .extrude(grip_reach)
-        .translate((body_length / 2, 0, handle_z_top))
+        cq.Workplane("XY")
+        .box(grip_reach, arm_s, arm_s)
+        .translate((body_length / 2 + grip_reach / 2, 0, handle_z_top))
     )
-    # Grip bar: vertical tube at arm tips, symmetric ±100mm in Y
+
+    # Grip bar: box with long axis in Z, at X = body_length/2 + grip_reach
+    #   X: centred at tip of arms
+    #   Y: ±arm_s/2
+    #   Z: from handle_z_bot to handle_z_top  (+ arm_s/2 each side to meet arms)
     grip = (
-        cq.Workplane("XZ")
-        .center(body_length / 2 + grip_reach, handle_z_bot + handle_h / 2)
-        .circle(14)
-        .extrude(100, both=True)   # symmetric: ±100 mm in Y
+        cq.Workplane("XY")
+        .box(arm_s, arm_s, handle_h + arm_s)
+        .translate((body_length / 2 + grip_reach, 0, handle_z_bot + handle_h / 2))
     )
+
     handle_shape = arm_bottom.union(arm_top).union(grip)
     assy.add(handle_shape, name="handle", color=Color(0.78, 0.78, 0.78, 1.0),
              loc=Location(Vector(0, 0, 0)))
