@@ -4,18 +4,14 @@ CadQuery prop / helper object for workspace layout planning.
 
 Product: https://www.hbm-machines.com/nl/p/hbm-verrijdbare-gereedschapswagen-met-houten-werkblad-146-cm-zwart
 
-Confirmed dimensions:
-  Width:          1460 mm  (from product name "146 cm")
-  Top thickness:   40 mm  (product spec)
+Confirmed dimensions (product spec):
+  Length (body):  1460 mm  ("146 cm" in product name)
+  Length (total): 1610 mm  (including side handle)
+  Depth:           460 mm  (46 cm)
+  Height:          920 mm  (92 cm, floor to top of wood surface)
+  Top thickness:    40 mm
 
-Estimated dimensions (from image proportional analysis):
-  Depth:           520 mm
-  Total height:    950 mm  (floor to top of wood surface, incl. wheels)
-  Wheel height:    125 mm  (5" swivel casters)
-  Top overhang:     25 mm  (all sides)
-
-⚠️  Verify exact depth and height with physical unit before finalising layout.
-    Clearance under workbench (LEG_HEIGHT=970mm) is ~20mm — very tight.
+Clearance under workbench (LEG_HEIGHT=970mm): 970 - 920 = 50 mm ✓
 """
 
 import cadquery as cq
@@ -23,17 +19,19 @@ from cadquery import Assembly, Color, Location, Vector
 
 # ── Parameters ───────────────────────────────────────────────────────────────
 
-CART_WIDTH          = 1460   # mm, X direction (confirmed)
-CART_DEPTH          = 520    # mm, Y direction (estimated)
-CART_TOTAL_HEIGHT   = 950    # mm, Z direction, floor to top of wood (estimated)
+CART_BODY_LENGTH    = 1460   # mm, X direction — cabinet body only (confirmed)
+CART_TOTAL_LENGTH   = 1610   # mm, X direction — including side handle (confirmed)
+CART_DEPTH          = 460    # mm, Y direction (confirmed)
+CART_TOTAL_HEIGHT   = 920    # mm, Z direction, floor to top of wood (confirmed)
 CART_TOP_THICKNESS  = 40     # mm (confirmed)
-CART_WHEEL_HEIGHT   = 125    # mm, floor clearance on casters (estimated)
+CART_WHEEL_HEIGHT   = 100    # mm, floor clearance on casters (estimated)
 CART_TOP_OVERHANG   = 25     # mm, overhang of wood top on each side (estimated)
 
 # Derived
 CART_BODY_HEIGHT = CART_TOTAL_HEIGHT - CART_TOP_THICKNESS - CART_WHEEL_HEIGHT
-CART_BODY_WIDTH  = CART_WIDTH  - 2 * CART_TOP_OVERHANG
-CART_BODY_DEPTH  = CART_DEPTH  - 2 * CART_TOP_OVERHANG
+CART_BODY_WIDTH  = CART_BODY_LENGTH  - 2 * CART_TOP_OVERHANG
+CART_BODY_DEPTH  = CART_DEPTH        - 2 * CART_TOP_OVERHANG
+CART_WIDTH       = CART_BODY_LENGTH   # alias used in build function
 
 # Number of drawers per column and columns
 DRAWER_COLS   = 3
@@ -54,12 +52,13 @@ def _make_wheel(r=40, h=30):
 
 
 def make_hbm_tool_cart(
-    width: float = CART_WIDTH,
+    width: float = CART_BODY_LENGTH,
     depth: float = CART_DEPTH,
     total_height: float = CART_TOTAL_HEIGHT,
     top_thickness: float = CART_TOP_THICKNESS,
     wheel_height: float = CART_WHEEL_HEIGHT,
     top_overhang: float = CART_TOP_OVERHANG,
+    handle_length: float = CART_TOTAL_LENGTH - CART_BODY_LENGTH,
 ) -> Assembly:
     """
     Return a CadQuery Assembly representing the HBM 146cm tool cart.
@@ -163,11 +162,12 @@ def get_bom() -> list[dict]:
         {
             "part": "HBM Gereedschapswagen 146cm (zwart)",
             "qty": 1,
-            "width_mm": CART_WIDTH,
+            "length_body_mm": CART_BODY_LENGTH,
+            "length_total_mm": CART_TOTAL_LENGTH,
             "depth_mm": CART_DEPTH,
             "height_mm": CART_TOTAL_HEIGHT,
             "top_mm": CART_TOP_THICKNESS,
-            "note": "Confirmed: width 1460mm, top 40mm. Estimated: depth 520mm, height 950mm.",
+            "note": "All dimensions confirmed from product spec.",
             "url": "https://www.hbm-machines.com/nl/p/hbm-verrijdbare-gereedschapswagen-met-houten-werkblad-146-cm-zwart",
         }
     ]
@@ -179,5 +179,6 @@ if __name__ == "__main__":
     print("HBM Tool Cart assembly built successfully.")
     for item in get_bom():
         print(f"  {item['part']}")
-        print(f"    {item['width_mm']} × {item['depth_mm']} × {item['height_mm']} mm")
-        print(f"    ⚠  {item['note']}")
+        print(f"    body {item['length_body_mm']} × {item['depth_mm']} × {item['height_mm']} mm")
+        print(f"    total length incl. handle: {item['length_total_mm']} mm")
+        print(f"    {item['note']}")
