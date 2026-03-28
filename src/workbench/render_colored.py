@@ -48,7 +48,7 @@ def render(
 
     # Camera: frontal-right, low — shows front face, cart + wheels, tanks
     cam = renderer.GetActiveCamera()
-    cam.SetPosition(3000, -5500, 800)
+    cam.SetPosition(3000, -5000, 1300)
     cam.SetFocalPoint(-300, 0, 500)
     cam.SetViewUp(0, 0, 1)
     renderer.ResetCameraClippingRange()
