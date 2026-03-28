@@ -227,9 +227,9 @@ def page_title(c, page_num, total_pages, iso_rl):
         ("Overall depth", f"{TABLE_WIDTH + 200} mm (incl. extension)"),
         ("Height", f"{LEG_HEIGHT + TABLE_THICKNESS} mm"),
         ("Primary material", "Solid timber, European standard sizes"),
-        ("Leg section", f"{LEG_WIDTH} × {LEG_DEPTH} mm eiken balk"),
-        ("Stretchers / Aprons", f"{STRETCHER_WIDTH} × {STRETCHER_HEIGHT} mm beuken gestoomd"),
-        ("Wall beam", f"{LEG_WIDTH} × {LEG_DEPTH} mm eiken (wall-anchored)"),
+        ("Leg section", f"{LEG_WIDTH} × {LEG_DEPTH} mm oak timber"),
+        ("Stretchers / Aprons", f"{STRETCHER_WIDTH} × {STRETCHER_HEIGHT} mm steamed beech"),
+        ("Wall beam", f"{LEG_WIDTH} × {LEG_DEPTH} mm oak (wall-anchored)"),
         ("Slat panels", "20 × 15 mm, 10 mm gaps"),
         ("Twinset storage", "6× D12 twinsets (3 cols × 2 rows)"),
         ("Sheets included", f"{total_pages} (title, BOM, elevations, plan, manual, details)"),
@@ -370,7 +370,7 @@ def page_elevations(c, page_num, total_pages, front_rl, side_rl, front_svg, side
     seg_a_x2, _ = fc(ext_left_leg_x - LEG_WIDTH / 2, 0)
     seg_a = round((ext_left_leg_x - LEG_WIDTH / 2) - (left_x + LEG_WIDTH / 2))
     draw_dimension_line(c, seg_a_x1, f0_y, seg_a_x2, f0_y,
-                        f"{seg_a} mm  (seg A — kar)", side="bottom", offset=18*mm)
+                        f"{seg_a} mm  (seg A — cart)", side="bottom", offset=18*mm)
     seg_b_x1, _ = fc(ext_left_leg_x + LEG_WIDTH / 2, 0)
     seg_b_x2, _ = fc(right_x - LEG_WIDTH / 2, 0)
     seg_b = round((right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2))
@@ -392,7 +392,7 @@ def page_elevations(c, page_num, total_pages, front_rl, side_rl, front_svg, side
 
     seg_b_depth = round((wall_back_y_val - LEG_DEPTH / 2) - (ext_front_leg_y + LEG_DEPTH / 2))
     draw_dimension_line(c, sf_inner_x, s0_y, sb_inner_x, s0_y,
-                        f"{seg_b_depth} mm  (seg B — diepte)", side="bottom", offset=7*mm)
+                        f"{seg_b_depth} mm  (seg B — depth)", side="bottom", offset=7*mm)
     # Total depth at top of side view (outside faces of front & back legs)
     sf_outer_x, stop_top_y = sc(ext_front_y, total_h)
     sb_outer_x, _          = sc(TABLE_WIDTH / 2, total_h)
@@ -456,19 +456,19 @@ IKEA_STEPS = [
         "title": "Step 1 — Install All Legs",
         "icon": "1",
         "bullets": [
-            f"Cut all legs to {LEG_HEIGHT} mm from {LEG_WIDTH}×{LEG_DEPTH} mm eiken balk.",
+            f"Cut all legs to {LEG_HEIGHT} mm from {LEG_WIDTH}×{LEG_DEPTH} mm oak timber.",
             "Mark leg positions on the floor using the plan drawing.",
             "Three wall legs will be bolted directly to the wall — set aside.",
             "Stand all floor legs upright. Check plumb with a spirit level.",
         ],
-        "parts": [f"Poot {LEG_WIDTH}×{LEG_DEPTH} mm  ×  6 totaal"],
+        "parts": [f"Leg {LEG_WIDTH}×{LEG_DEPTH} mm  ×  6 total"],
     },
     {
         "stage": 1,
         "title": "Step 2 — Fit Bottom Stretchers",
         "icon": "2",
         "bullets": [
-            f"Cut stretchers from {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm beuken gestoomd (see BOM for lengths).",
+            f"Cut stretchers from {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm steamed beech (see BOM for lengths).",
             "Cut mortises in legs: 18×60 mm, 32 mm deep, centred on face.",
             "Cut tenons on stretcher ends: 18×60×30 mm, 16 mm shoulders.",
             "Dry fit all joints before gluing.",
@@ -476,22 +476,22 @@ IKEA_STEPS = [
             "Clamp in place and drill pocket-screw holes (Kreg jig or similar).",
             "Drive 2× 50 mm pocket screws per joint end. Do not overtighten.",
         ],
-        "parts": [f"Strekker {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm  ×  2", "Pocket screw 50 mm  ×  8"],
+        "parts": [f"Stretcher {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm  ×  2", "Pocket screw 50 mm  ×  8"],
     },
     {
         "stage": 2,
         "title": "Step 3 — Fit Top Aprons & Wall Beam",
         "icon": "3",
         "bullets": [
-            f"Cut aprons from {APRON_THICKNESS}×{APRON_HEIGHT} mm beuken gestoomd — same lengths as stretchers.",
+            f"Cut aprons from {APRON_THICKNESS}×{APRON_HEIGHT} mm steamed beech — same lengths as stretchers.",
             f"Fix aprons at {round(LEG_HEIGHT - APRON_HEIGHT/2)} mm from floor (centre), flush with leg inner faces.",
-            f"Mount wall beam ({LEG_WIDTH}×{LEG_DEPTH} mm eiken) to wall at apron height using M10×120 mm lag screws.",
+            f"Mount wall beam ({LEG_WIDTH}×{LEG_DEPTH} mm oak) to wall at apron height using M10×120 mm lag screws.",
             "Space lag screws at 600 mm centres — use rawlplugs in masonry.",
             "Bolt back apron to face of wall beam.",
         ],
         "parts": [
             f"Apron {APRON_THICKNESS}×{APRON_HEIGHT} mm  ×  2",
-            f"Wandbalk {LEG_WIDTH}×{LEG_DEPTH} mm  ×  1",
+            f"Wall beam {LEG_WIDTH}×{LEG_DEPTH} mm  ×  1",
             "M10×120 lag screw  ×  6",
         ],
     },
@@ -500,25 +500,25 @@ IKEA_STEPS = [
         "title": "Step 4 — Lay the Tabletop",
         "icon": "4",
         "bullets": [
-            f"Cut tabletop to {TABLE_LENGTH} × {TABLE_WIDTH} mm from {TABLE_THICKNESS} mm beuken gestoomd (edge-glued).",
+            f"Cut tabletop to {TABLE_LENGTH} × {TABLE_WIDTH} mm from {TABLE_THICKNESS} mm steamed beech (edge-glued).",
             "Lower onto frame. Check overhang is equal on all sides.",
             "Fix from below through apron top edge using pocket screws or figure-8 clips.",
             "Allow for wood movement — do not fully glue to frame.",
         ],
-        "parts": [f"Tafelblad {TABLE_LENGTH}×{TABLE_WIDTH}×{TABLE_THICKNESS} mm  ×  1", "Pocket screw 50 mm  ×  16"],
+        "parts": [f"Tabletop {TABLE_LENGTH}×{TABLE_WIDTH}×{TABLE_THICKNESS} mm  ×  1", "Pocket screw 50 mm  ×  16"],
     },
     {
         "stage": 4,
         "title": "Step 5 — Fit Slat Mounting Rails",
         "icon": "5",
         "bullets": [
-            f"Cut front rails and right-side rail from {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm beuken gestoomd (see BOM).",
+            f"Cut front rails and right-side rail from {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm steamed beech (see BOM).",
             "Position rails flush with leg inner faces — check alignment carefully.",
             "Slat wall sits 10 mm inside the leg outer face — rails go directly behind.",
             "Fix rails with 2× pocket screws per leg joint.",
         ],
         "parts": [
-            f"Montagregel {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm  ×  3 (voor ×2, rechts ×1)",
+            f"Mounting rail {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm  ×  3 (front ×2, right ×1)",
             "Pocket screw 50 mm  ×  12",
         ],
     },
@@ -622,7 +622,7 @@ def page_details(c, page_num, total_pages):
         ("Leg height", f"{LEG_HEIGHT} mm"),
         ("Tabletop thickness", f"{TABLE_THICKNESS} mm"),
         ("Overall height", f"{LEG_HEIGHT + TABLE_THICKNESS} mm"),
-        ("Legs", f"{LEG_WIDTH} × {LEG_DEPTH} mm eiken balk"),
+        ("Legs", f"{LEG_WIDTH} × {LEG_DEPTH} mm oak timber"),
         ("Stretchers", f"{STRETCHER_WIDTH} × 75 mm (at {STRETCHER_Z} mm from floor)"),
         ("Aprons", f"{APRON_THICKNESS} × 75 mm (at {round(LEG_HEIGHT - APRON_HEIGHT/2)} mm from floor)"),
         ("Wall beam", f"{LEG_WIDTH} × {LEG_DEPTH} mm, wall-anchored"),
@@ -654,7 +654,7 @@ def page_details(c, page_num, total_pages):
             "Pre-drill and countersink to avoid splitting.",
         ]),
         ("2. WALL BEAM TO WALL", [
-            f"{LEG_WIDTH}×{LEG_DEPTH} mm eiken wandbalk op apronhoogte ({round(LEG_HEIGHT - APRON_HEIGHT/2)} mm).",
+            f"{LEG_WIDTH}×{LEG_DEPTH} mm oak wall beam at apron height ({round(LEG_HEIGHT - APRON_HEIGHT/2)} mm).",
             "M10×120 mm lag screws at 600 mm spacing.",
             "Use rawlplugs / expansion anchors for masonry.",
         ]),
@@ -848,7 +848,7 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     c.setFillColor(colors.HexColor("#444444"))
     ext_cx = E_[0] + ext_l / 2   # centre X of extension = D[0] + ext_l/2
     ext_cy = oy + ext_d / 2      # centre Y of extension
-    c.drawCentredString(ext_cx, ext_cy + 2 * mm, "uitbouw")
+    c.drawCentredString(ext_cx, ext_cy + 2 * mm, "extension")
     c.drawCentredString(ext_cx, ext_cy - 2 * mm, f"{EXT_LENGTH:.0f}×{EXT_DEPTH} mm")
 
     # Material callout (centre-left of main body, well away from extension)
@@ -856,9 +856,9 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     c.setFillColor(colors.HexColor("#222222"))
     note_x = ox + (draw_w - ext_l) / 2
     note_y = G[1] + main_d / 2
-    c.drawCentredString(note_x, note_y + 4 * mm, f"Dikte: {TABLE_THICKNESS} mm")
-    c.drawCentredString(note_x, note_y,           "Beuken gestoomd 52 mm")
-    c.drawCentredString(note_x, note_y - 4 * mm, "Edge-glued · 4 planken")
+    c.drawCentredString(note_x, note_y + 4 * mm, f"Thickness: {TABLE_THICKNESS} mm")
+    c.drawCentredString(note_x, note_y,           "Steamed beech 52 mm")
+    c.drawCentredString(note_x, note_y - 4 * mm, "Edge-glued · 4 boards")
     c.drawCentredString(note_x, note_y - 8 * mm, f"{N_PLANKS} × {PLANK_W_MM} × 2700 mm")
 
     # Panel border
@@ -921,6 +921,18 @@ def _draw_iso_box(c, ox, oy, w, d, h, scale, label, dims_text):
         c.drawCentredString(ox, oy - 5 * mm - i * 4 * mm, txt)
 
 
+JOINERY_MAP = {
+    "Leg":           "4× mortise 18×60mm, 32mm deep — per stretcher M&T joint",
+    "Wall beam":     "6× Ø12mm clearance holes at 600mm centres (M10 lag screws)",
+    "Stretcher":     "Both ends: tenon 18×60×30mm — glue + pocket screw",
+    "Apron":         "Both ends: 2× pocket screw holes (Kreg jig, 50°)",
+    "Mounting rail": "Both ends: 2× pocket screw holes (Kreg jig, 50°)",
+    "Rail":          "Both ends: 2× pocket screw holes (Kreg jig, 50°)",
+    "Slat":          "Both ends: Ø3mm pilot hole, 2× 3.5×35mm screw per rail",
+    "Tabletop":      "Figure-8 clips or pocket screws from below; no glue to frame",
+}
+
+
 def _draw_part_cell(c, bx, by, bw, bh, name, w_mm, d_mm, l_mm, qty, note=""):
     """Draw one part cell: front face view + end cross-section + annotations.
 
@@ -936,10 +948,11 @@ def _draw_part_cell(c, bx, by, bw, bh, name, w_mm, d_mm, l_mm, qty, note=""):
 
     PAD      = 3 * mm
     TITLE_H  = 10 * mm
-    ANN_BOT  = 9 * mm   # space for bottom annotation (length / width)
+    ANN_BOT  = 13 * mm  # space for bottom annotation (length / width) — increased for clearance
     ANN_LEFT = 11 * mm  # space for left annotation (face height)
     ANN_RIGHT= 10 * mm  # space for right annotation on end section
     GAP      = 5 * mm   # gap between front and end drawing
+    JOIN_H   = 7 * mm   # height reserved at bottom for joinery callout
 
     # ── Title bar ────────────────────────────────────────────────────────
     c.setFont("Helvetica-Bold", 8)
@@ -953,11 +966,11 @@ def _draw_part_cell(c, bx, by, bw, bh, name, w_mm, d_mm, l_mm, qty, note=""):
     c.setLineWidth(0.3)
     c.line(bx, by + bh - TITLE_H, bx + bw, by + bh - TITLE_H)
 
-    # ── Drawing area bounds ───────────────────────────────────────────────
+    # ── Drawing area bounds (raised to leave JOIN_H at bottom for joinery note)
     da_x = bx + PAD + ANN_LEFT
-    da_y = by + PAD + ANN_BOT
+    da_y = by + JOIN_H + PAD + ANN_BOT
     da_w = bw - PAD - ANN_LEFT - PAD   # full width minus left pad+annotation and right pad
-    da_h = bh - TITLE_H - PAD - ANN_BOT - PAD
+    da_h = bh - TITLE_H - PAD - ANN_BOT - PAD - JOIN_H
 
     # ── End section (right side of cell) ─────────────────────────────────
     # Scale so it fills the full draw height (minus annotation space)
@@ -1000,7 +1013,6 @@ def _draw_part_cell(c, bx, by, bw, bh, name, w_mm, d_mm, l_mm, qty, note=""):
     # Break line (zig-zag) if foreshortened
     if foreshortened:
         bk_x = front_x + front_w_pt * 0.65
-        bk_amp = front_h_pt * 0.35
         bk_w   = 3 * mm
         c.setFillColor(colors.white)
         c.setStrokeColor(colors.white)
@@ -1017,6 +1029,11 @@ def _draw_part_cell(c, bx, by, bw, bh, name, w_mm, d_mm, l_mm, qty, note=""):
         for pt in pts[1:]:
             path.lineTo(*pt)
         c.drawPath(path)
+
+    # ── View label — FRONT VIEW (inside rect, near bottom) ───────────────
+    c.setFont("Helvetica", 5.5)
+    c.setFillColor(colors.HexColor("#888888"))
+    c.drawCentredString(front_x + front_w_pt / 2, front_y + 1.5*mm, "FRONT VIEW")
 
     # ── Draw end section ─────────────────────────────────────────────────
     c.setFillColor(WOOD_END)
@@ -1040,6 +1057,11 @@ def _draw_part_cell(c, bx, by, bw, bh, name, w_mm, d_mm, l_mm, qty, note=""):
     c.setLineWidth(0.7)
     c.rect(end_x, end_y, end_w_pt, end_h_pt, fill=0, stroke=1)
 
+    # ── View label — CROSS-SECTION (inside rect, near bottom) ────────────
+    c.setFont("Helvetica", 5.5)
+    c.setFillColor(colors.HexColor("#888888"))
+    c.drawCentredString(end_x + end_w_pt / 2, end_y + 1.5*mm, "CROSS-SECTION")
+
     # ── Dimension annotations ─────────────────────────────────────────────
     # Front: length at bottom
     draw_dimension_line(c, front_x, front_y, front_x + front_w_pt, front_y,
@@ -1055,17 +1077,35 @@ def _draw_part_cell(c, bx, by, bw, bh, name, w_mm, d_mm, l_mm, qty, note=""):
                         end_x + end_w_pt, end_y + end_h_pt,
                         f"{d_mm} mm", side="right", offset=5*mm)
 
-    # ── View labels ───────────────────────────────────────────────────────
-    c.setFont("Helvetica", 6)
-    c.setFillColor(colors.HexColor("#666666"))
-    c.drawCentredString(front_x + front_w_pt / 2, front_y - ANN_BOT + 1*mm, "VOORAANZICHT")
-    c.drawCentredString(end_x + end_w_pt / 2,     end_y   - ANN_BOT + 1*mm, "DOORSNEDE")
+    # ── Joinery callout ───────────────────────────────────────────────────
+    joinery_text = None
+    name_lower = name.lower()
+    for key, info in JOINERY_MAP.items():
+        if key.lower() in name_lower:
+            joinery_text = info
+            break
 
-    # ── Note ──────────────────────────────────────────────────────────────
-    if note:
+    # Separator rule above joinery note
+    rule_y = by + JOIN_H + 0.5 * mm
+    c.setStrokeColor(colors.HexColor("#cccccc"))
+    c.setLineWidth(0.3)
+    c.line(bx + PAD, rule_y, bx + bw - PAD, rule_y)
+
+    # Joinery note text
+    if joinery_text:
+        c.setFillColor(colors.HexColor("#003366"))
+        c.setFont("Helvetica-Bold", 6.5)
+        label_w = c.stringWidth("JOINERY: ", "Helvetica-Bold", 6.5)
+        note_x = bx + PAD
+        note_y = by + 1.5 * mm
+        c.drawString(note_x, note_y, "JOINERY:")
+        c.setFont("Helvetica", 6.5)
+        c.drawString(note_x + label_w, note_y, joinery_text[:100])
+    elif note:
+        # Fallback: show note field if no joinery info
         c.setFont("Helvetica-Oblique", 6)
         c.setFillColor(colors.HexColor("#666666"))
-        c.drawString(bx + PAD, by + PAD / 2, note[:90])
+        c.drawString(bx + PAD, by + 1.5 * mm, note[:90])
 
     # ── Cell border ───────────────────────────────────────────────────────
     c.setStrokeColor(colors.HexColor("#999999"))
@@ -1080,7 +1120,7 @@ def page_timber_parts(c, page_num, total_pages):
 
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(colors.black)
-    c.drawString(MARGIN, content_y + content_h + 2 * mm, "ONDERDELEN — MAATTEKENINGEN")
+    c.drawString(MARGIN, content_y + content_h + 2 * mm, "PARTS — COMPONENT DRAWINGS")
 
     # Collect unique structural parts from BOM (deduplicate same section+length)
     bom = get_bom()
@@ -1124,7 +1164,7 @@ def page_timber_parts(c, page_num, total_pages):
             note=item.get("note", ""),
         )
 
-    draw_title_block(c, page_num, total_pages, "Onderdelen — Maattekeningen")
+    draw_title_block(c, page_num, total_pages, "Parts — Component Drawings")
     c.showPage()
 
 
@@ -1136,7 +1176,7 @@ def page_joinery_detail(c, page_num, total_pages):
 
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(colors.black)
-    c.drawString(MARGIN, content_y + content_h + 2 * mm, "VERBINDINGSDETAIL — PEN & GAT (M&T)")
+    c.drawString(MARGIN, content_y + content_h + 2 * mm, "JOINERY DETAIL — MORTISE & TENON (M&T)")
 
     SCALE = 1.7 * mm  # paper-pt per real-mm (gives ~85mm on paper for 50mm real)
 
@@ -1157,9 +1197,9 @@ def page_joinery_detail(c, page_num, total_pages):
     notes_h = 22 * mm
     notes_y = content_y + 2 * mm
     notes = [
-        "Verlijmen met D3 houtlijm. Pen volledig insmeren, gat droog laten.",
-        "Klemmen: 30 min. Uithardingstijd: 24h voor belasting.",
-        "Freesmachine met rechte frees of gatenboor + beitel.",
+        "Glue with D3 wood glue. Fully coat tenon, leave mortise dry.",
+        "Clamp: 30 min. Cure time: 24h before loading.",
+        "Router with straight bit or drill + chisel.",
     ]
     c.setFont("Helvetica", 8)
     c.setFillColor(colors.HexColor("#333333"))
@@ -1235,7 +1275,7 @@ def page_joinery_detail(c, page_num, total_pages):
     c.rect(lp_x, lp_y, lp_w, lp_h)
     c.setFont("Helvetica-Bold", 8)
     c.setFillColor(colors.black)
-    c.drawCentredString(lp_x + lp_w / 2, lp_y + 3 * mm, "PEN (zijaanzicht eindvlak, Y-Z vlak)")
+    c.drawCentredString(lp_x + lp_w / 2, lp_y + 3 * mm, "TENON (side view of end face, Y-Z plane)")
 
     # ── Right panel: Mortise (front view of leg face, X-Z plane) ─────────────
     leg_x = rp_x + (rp_w - lw) / 2
@@ -1279,7 +1319,7 @@ def page_joinery_detail(c, page_num, total_pages):
     c.setFillColor(colors.HexColor("#222222"))
     depth_note_x = m_x + mw + 4 * mm
     depth_note_y = m_y + mh / 2 - 2 * mm
-    c.drawString(depth_note_x, depth_note_y, f"Diepte: {MORTISE_DEPTH} mm")
+    c.drawString(depth_note_x, depth_note_y, f"Depth: {MORTISE_DEPTH} mm")
     c.setLineWidth(0.4)
     c.setStrokeColor(colors.HexColor("#555555"))
     c.line(m_x + mw, m_y + mh / 2, depth_note_x - 1 * mm, depth_note_y + 2 * mm)
@@ -1290,9 +1330,9 @@ def page_joinery_detail(c, page_num, total_pages):
     c.rect(rp_x, rp_y, rp_w, rp_h)
     c.setFont("Helvetica-Bold", 8)
     c.setFillColor(colors.black)
-    c.drawCentredString(rp_x + rp_w / 2, rp_y + 3 * mm, "GAT (vooraanzicht pootvlak, X-Z vlak)")
+    c.drawCentredString(rp_x + rp_w / 2, rp_y + 3 * mm, "MORTISE (front view of leg face, X-Z plane)")
 
-    draw_title_block(c, page_num, total_pages, "Verbindingsdetail — Pen & Gat (M&T)")
+    draw_title_block(c, page_num, total_pages, "Joinery Detail — Mortise & Tenon (M&T)")
     c.showPage()
 
 

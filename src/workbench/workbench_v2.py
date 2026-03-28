@@ -14,13 +14,13 @@ from helper_objects.hbm_tool_cart import make_hbm_tool_cart
 
 TABLE_LENGTH = 2700
 TABLE_WIDTH = 800
-TABLE_THICKNESS = 52   # beuken gestoomd 52 mm (per BESTELBON)
+TABLE_THICKNESS = 52   # steamed beech 52 mm (per order)
 
-LEG_WIDTH = 80  # eiken balk 80×80 mm (per BESTELBON)
+LEG_WIDTH = 80  # oak timber 80×80 mm (per order)
 LEG_DEPTH = 80
 LEG_HEIGHT = 970
 
-STRETCHER_WIDTH = 52  # beuken 52×75 mm (per BESTELBON; uit 52×150 gesplist)
+STRETCHER_WIDTH = 52  # steamed beech 52×75 mm (per order; ripped from 52×150)
 STRETCHER_HEIGHT = 75
 STRETCHER_INSET = 50
 STRETCHER_Z = 150
@@ -42,8 +42,8 @@ TWINSET_ROWS = 2
 SLAT_WIDTH = 20  # face width of each slat (X direction), mm
 SLAT_DEPTH = 15  # depth of each slat (Y direction), mm
 SLAT_GAP = 10  # gap between slats, mm
-SLAT_BOTTOM_Z = 20       # 2 cm boven vloer
-SLAT_TOP_CLEARANCE = 10  # 1 cm onder onderkant blad → slat = 970−20−10 = 940 mm
+SLAT_BOTTOM_Z = 20       # 2 cm above floor
+SLAT_TOP_CLEARANCE = 10  # 1 cm below underside of top → slat = 970−20−10 = 940 mm
 SLAT_WALL_INSET = 10     # how far inside the leg front face the slat wall sits, mm
 
 EXT_DEPTH = 200
@@ -51,7 +51,7 @@ EXT_LENGTH = 800  # mm — widened from 780 to give 34mm clearance left of twins
 FILLET_RADIUS = 100
 
 # Wall beam parameters (mounts flush against the wall at back of table)
-WALL_BEAM_WIDTH = 80   # eiken balk 80×80 mm (per BESTELBON)
+WALL_BEAM_WIDTH = 80   # oak timber 80×80 mm (per order)
 WALL_BEAM_HEIGHT = 80  # depth into wall (Y)
 WALL_BEAM_LENGTH = TABLE_LENGTH - 2 * STRETCHER_INSET  # inset on left and right sides
 
@@ -243,92 +243,92 @@ def get_bom():
         # Legs
         {
             "part": f"Leg {LEG_WIDTH}×{LEG_DEPTH}mm",
-            "material": "Eiken balk",
+            "material": "Oak timber",
             "qty": total_legs,
             "width_mm": LEG_WIDTH,
             "depth_mm": LEG_DEPTH,
             "length_mm": LEG_HEIGHT,
-            "note": "Alle constructiepoten",
+            "note": "All structural legs",
         },
         # Main left stretcher
         {
-            "part": f"Strekker {STRETCHER_WIDTH}×75mm — linkerzijde",
-            "material": "Beuken gestoomd",
+            "part": f"Stretcher {STRETCHER_WIDTH}×75mm — left side",
+            "material": "Steamed beech",
             "qty": 1,
             "width_mm": STRETCHER_WIDTH,
             "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(main_left_span),
-            "note": "Voorkant-links tot wand, onderste regel",
+            "note": "Front-left to wall, bottom rail",
         },
         # ext_left stretcher
         {
-            "part": f"Strekker {STRETCHER_WIDTH}×75mm — uitbouw links",
-            "material": "Beuken gestoomd",
+            "part": f"Stretcher {STRETCHER_WIDTH}×75mm — ext. left",
+            "material": "Steamed beech",
             "qty": 1,
             "width_mm": STRETCHER_WIDTH,
             "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(ext_left_span_y - LEG_DEPTH),
-            "note": "Uitbouw linkerzijde, onderste regel",
+            "note": "Ext. left side, bottom rail",
         },
         # Main left apron
         {
-            "part": f"Apron {APRON_THICKNESS}×75mm — linkerzijde",
-            "material": "Beuken gestoomd",
+            "part": f"Apron {APRON_THICKNESS}×75mm — left side",
+            "material": "Steamed beech",
             "qty": 1,
             "width_mm": APRON_THICKNESS,
             "depth_mm": APRON_HEIGHT,
             "length_mm": round(main_left_span),
-            "note": "Voorkant-links tot wand, bovenste regel",
+            "note": "Front-left to wall, top rail",
         },
         # ext_left apron
         {
-            "part": f"Apron {APRON_THICKNESS}×75mm — uitbouw links",
-            "material": "Beuken gestoomd",
+            "part": f"Apron {APRON_THICKNESS}×75mm — ext. left",
+            "material": "Steamed beech",
             "qty": 1,
             "width_mm": APRON_THICKNESS,
             "depth_mm": APRON_HEIGHT,
             "length_mm": round(ext_left_span_y + LEG_DEPTH),
-            "note": "Uitbouw linkerzijde, bovenste regel",
+            "note": "Ext. left side, top rail",
         },
         # Wall beam
         {
-            "part": f"Wandbalk {WALL_BEAM_WIDTH}×{WALL_BEAM_HEIGHT}mm",
-            "material": "Eiken balk",
+            "part": f"Wall beam {WALL_BEAM_WIDTH}×{WALL_BEAM_HEIGHT}mm",
+            "material": "Oak timber",
             "qty": 1,
             "width_mm": WALL_BEAM_WIDTH,
             "depth_mm": WALL_BEAM_HEIGHT,
             "length_mm": WALL_BEAM_LENGTH,
-            "note": "Wandgemonteerde achterbalk; ankerbouten in muur",
+            "note": "Wall-mounted rear beam; lag screws into wall",
         },
         # Twinset front mounting rails (bottom + top)
         {
-            "part": f"Montageregel {STRETCHER_WIDTH}×75mm — voorzijde",
-            "material": "Beuken gestoomd",
+            "part": f"Mounting rail {STRETCHER_WIDTH}×75mm — front",
+            "material": "Steamed beech",
             "qty": 2,
             "width_mm": STRETCHER_WIDTH,
             "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(front_rail_span),
-            "note": "Onder + boven rail voor lattenwand voorzijde",
+            "note": "Bottom + top rail for front slat wall",
         },
         # Right side top rail
         {
-            "part": f"Rail {STRETCHER_WIDTH}×75mm — rechterzijde boven",
-            "material": "Beuken gestoomd",
+            "part": f"Rail {STRETCHER_WIDTH}×75mm — right side top",
+            "material": "Steamed beech",
             "qty": 1,
             "width_mm": STRETCHER_WIDTH,
             "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(right_rail_span),
-            "note": "Bovenste rail, rechterzijde twinset nis",
+            "note": "Top rail, right side twinset enclosure",
         },
         # Tabletop
         {
-            "part": "Tafelblad (L-vorm)",
-            "material": f"Beuken gestoomd {TABLE_THICKNESS}mm (edge-glued)",
+            "part": "Tabletop (L-shape)",
+            "material": f"Steamed beech {TABLE_THICKNESS}mm (edge-glued)",
             "qty": 1,
             "width_mm": TABLE_LENGTH,
             "depth_mm": TABLE_WIDTH + EXT_DEPTH,
             "length_mm": TABLE_THICKNESS,
-            "note": f"L-vorm {TABLE_LENGTH}×{TABLE_WIDTH}+uitbouw {EXT_LENGTH}×{EXT_DEPTH}mm — zie tekening",
+            "note": f"L-shape {TABLE_LENGTH}×{TABLE_WIDTH}mm + ext. {EXT_LENGTH}×{EXT_DEPTH}mm — see drawing",
         },
         # Front slats
         {
