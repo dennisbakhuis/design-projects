@@ -46,11 +46,11 @@ def render(
     for act in toVTKAssy(assy):
         renderer.AddActor(act)
 
-    renderer.ResetCamera()
+    # Explicit camera: front-right, low enough to see cart under the bench
     cam = renderer.GetActiveCamera()
-    cam.Elevation(elevation)
-    cam.Azimuth(azimuth)
-    cam.Roll(roll)
+    cam.SetPosition(4500, -3500, 2200)
+    cam.SetFocalPoint(-300, 0, 600)
+    cam.SetViewUp(0, 0, 1)
     renderer.ResetCameraClippingRange()
 
     win = vtkRenderWindow()
