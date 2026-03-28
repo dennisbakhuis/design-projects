@@ -42,8 +42,8 @@ TWINSET_ROWS = 2
 SLAT_WIDTH = 20  # face width of each slat (X direction), mm
 SLAT_DEPTH = 15  # depth of each slat (Y direction), mm
 SLAT_GAP = 10  # gap between slats, mm
-SLAT_BOTTOM_Z = 15       # clearance above floor, mm → slat = 970−15−15 = 940 mm
-SLAT_TOP_CLEARANCE = 15  # clearance below tabletop underside, mm
+SLAT_BOTTOM_Z = 20       # 2 cm boven vloer
+SLAT_TOP_CLEARANCE = 10  # 1 cm onder onderkant blad → slat = 970−20−10 = 940 mm
 SLAT_WALL_INSET = 10     # how far inside the leg front face the slat wall sits, mm
 
 EXT_DEPTH = 200
@@ -232,8 +232,8 @@ def get_bom():
     front_rail_span = (right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2)
     right_rail_span = abs(wall_back_y - LEG_DEPTH / 2 - (ext_front_leg_y + LEG_DEPTH / 2))
 
-    # Slat counts — height between mounting rails
-    slat_height = (APRON_Z - APRON_HEIGHT / 2) - (STRETCHER_Z + STRETCHER_HEIGHT / 2)
+    # Slat counts
+    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE  # 940 mm
     front_wall_span = (right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2)
     n_front_slats = int(front_wall_span // (SLAT_WIDTH + SLAT_GAP))
     side_wall_span = (wall_back_y - LEG_DEPTH / 2) - (ext_front_leg_y + LEG_DEPTH / 2)
@@ -470,14 +470,13 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
         return assy
 
     # ── Slats ─────────────────────────────────────────────────────────────
-    # Slats fit between the two mounting rails (no clipping)
-    slat_z_bot = STRETCHER_Z + STRETCHER_HEIGHT / 2   # top of bottom rail
-    slat_z_top = APRON_Z - APRON_HEIGHT / 2            # bottom of top rail
-    slat_height = slat_z_top - slat_z_bot              # ≈ 707.5 mm
-    slat_z_ctr  = (slat_z_bot + slat_z_top) / 2
+    # Slats: 2cm above floor → 1cm below tabletop underside (screw to mounting rails)
+    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE  # 940 mm
+    slat_z_ctr  = SLAT_BOTTOM_Z + slat_height / 2
 
     side_slat_x = ext_left_leg_x - LEG_WIDTH / 2 + SLAT_WALL_INSET + SLAT_DEPTH / 2
-    front_slat_wall_y = ext_front_leg_y + LEG_DEPTH / 2 - SLAT_WALL_INSET - SLAT_DEPTH / 2
+    # Position slats in FRONT of mounting rails (same formula as make_workbench)
+    front_slat_wall_y = ext_front_y + STRETCHER_INSET + SLAT_WALL_INSET + SLAT_DEPTH / 2
 
     slat_x_left = ext_left_leg_x + LEG_WIDTH / 2
     slat_x_right = right_x - LEG_WIDTH / 2
@@ -488,7 +487,7 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
     x0 = (slat_x_left + slat_x_right) / 2 - arr_span_f / 2 + SLAT_WIDTH / 2
     for i in range(n_f):
         assy.add(box(SLAT_WIDTH, SLAT_DEPTH, slat_height), name=f"fs_{i}",
-                 loc=loc(x0 + i * pitch, front_slat_wall_y, slat_z_ctr),
+                 loc=loc(x0 + i * pitch, front_slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
                  color=Color("burlywood"))
 
     side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2
@@ -500,7 +499,7 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
     y0 = side_cy - arr_span_s / 2 + SLAT_WIDTH / 2
     for i in range(n_s):
         assy.add(box(SLAT_DEPTH, SLAT_WIDTH, slat_height), name=f"ss_{i}",
-                 loc=loc(side_slat_x, y0 + i * pitch, slat_z_ctr),
+                 loc=loc(side_slat_x, y0 + i * pitch, SLAT_BOTTOM_Z + slat_height / 2),
                  color=Color("burlywood"))
 
     return assy
@@ -617,10 +616,8 @@ def make_workbench(include_props: bool = True):
     # Leg front face is at ext_front_y + STRETCHER_INSET; slat sits SLAT_WALL_INSET mm behind it
     slat_wall_y = ext_front_y + STRETCHER_INSET + SLAT_WALL_INSET + SLAT_DEPTH / 2
 
-    slat_z_bot  = STRETCHER_Z + STRETCHER_HEIGHT / 2
-    slat_z_top  = APRON_Z - APRON_HEIGHT / 2
-    slat_height = slat_z_top - slat_z_bot
-    slat_z_ctr  = (slat_z_bot + slat_z_top) / 2
+    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE  # 940 mm
+    slat_z_ctr  = SLAT_BOTTOM_Z + slat_height / 2
 
     for i, x_offset in enumerate(slat_wall_positions(slat_wall_width)):
         assy.add(

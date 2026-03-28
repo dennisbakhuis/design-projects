@@ -527,7 +527,7 @@ IKEA_STEPS = [
         "title": "Step 6 — Hang Slat Panels",
         "icon": "6",
         "bullets": [
-            "Cut slats to height from 20×15 mm timber. Slats fit between bottom and top rails — no floor gap.",
+            "Cut slats to 940 mm from 20×15 mm timber. Start 20 mm above floor, stop 10 mm below tabletop underside. Screw to mounting rails.",
             "Space slats 10 mm apart — use a scrap spacer block for consistency.",
             "Drive 2× 3.5×35 mm screws per slat end (top and bottom rail).",
             "Front panel: slats run vertically across X, spaced along X.",
@@ -1195,7 +1195,7 @@ def main():
     timber_parts = [
         ("leg", LEG_WIDTH, LEG_DEPTH, LEG_HEIGHT),
         ("stretcher_apron", STRETCHER_WIDTH, 75, 900),  # representative length
-        ("slat", SLAT_WIDTH, SLAT_DEPTH, 708),  # fits between bottom and top rails
+        ("slat", SLAT_WIDTH, SLAT_DEPTH, 940),
     ]
     for name, w, d, l in timber_parts:
         part = make_box_part(w, d, l)
