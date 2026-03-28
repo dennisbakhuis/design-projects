@@ -3,182 +3,183 @@ HBM Verrijdbare Gereedschapswagen met Houten Werkblad — 146 cm (zwart)
 CadQuery prop / helper object for workspace layout planning.
 
 Product: https://www.hbm-machines.com/nl/p/hbm-verrijdbare-gereedschapswagen-met-houten-werkblad-146-cm-zwart
+Artikelnummer: 4945  |  EAN: 7435125878907  |  Prijs: €699,99 incl. btw
 
-Confirmed dimensions (product spec):
-  Length (body):  1460 mm  ("146 cm" in product name)
-  Length (total): 1610 mm  (including side handle)
-  Depth:           460 mm  (46 cm)
-  Height:          920 mm  (92 cm, floor to top of wood surface)
-  Top thickness:    40 mm
+── Confirmed dimensions (from product spec) ────────────────────────────────
+  Outer (incl. wielen + handvat):  1610 × 460 × 920 mm  (L × B × H)
+  Body only (excl. accessoires):   1465 × 460 × 770 mm
+  Wielen diameter:  125 mm  |  breedte: 30 mm
+  Wiel-hoogte (caster assembly):   920 - 770 = 150 mm
+  Houten blad dikte: 40 mm
+  Handvat-uitsteek:  1610 - 1465 = 145 mm (rechter zijkant)
+  Gewicht: 125 kg  |  Max belasting: 750 kg  |  Laden: 20
 
-Clearance under workbench (LEG_HEIGHT=970mm): 970 - 920 = 50 mm ✓
+── Lade-afmetingen (binnenwerk) ────────────────────────────────────────────
+  Bovenste grote la:  400 × 960 × 100 mm  (D × B × H)
+  Lade 1:  400 × 330 × 45 mm
+  Lade 2:  400 × 330 × 150 mm
+  Lade 3:  400 × 570 × 45 mm
+  Lade 4:  400 × 570 × 150 mm
+  Lade 5:  400 × 330 × 45 mm
+  Lade 6:  400 × 330 × 200 mm
+
+── Fit check werkbank (LEG_HEIGHT = 970 mm) ────────────────────────────────
+  Hoogte kar: 920 mm  →  speling: 970 - 920 = 50 mm  ✓
+  Lengte (body): 1465 mm  →  past in segment A (1845 mm vrij)  ✓
+  Diepte: 460 mm  →  past onder werkbank (≥725 mm beschikbaar)  ✓
 """
 
 import cadquery as cq
 from cadquery import Assembly, Color, Location, Vector
 
-# ── Parameters ───────────────────────────────────────────────────────────────
+# ── Parameters (all confirmed from product spec) ──────────────────────────────
 
-CART_BODY_LENGTH    = 1460   # mm, X direction — cabinet body only (confirmed)
-CART_TOTAL_LENGTH   = 1610   # mm, X direction — including side handle (confirmed)
-CART_DEPTH          = 460    # mm, Y direction (confirmed)
-CART_TOTAL_HEIGHT   = 920    # mm, Z direction, floor to top of wood (confirmed)
-CART_TOP_THICKNESS  = 40     # mm (confirmed)
-CART_WHEEL_HEIGHT   = 100    # mm, floor clearance on casters (estimated)
-CART_TOP_OVERHANG   = 25     # mm, overhang of wood top on each side (estimated)
+CART_BODY_LENGTH    = 1465   # mm, cabinet body without handle
+CART_TOTAL_LENGTH   = 1610   # mm, including side handle
+CART_DEPTH          = 460    # mm
+CART_TOTAL_HEIGHT   = 920    # mm, floor to top of wood surface
+CART_BODY_HEIGHT_NO_WHEEL = 770   # mm, body without wheel assembly
+CART_WHEEL_HEIGHT   = 150    # mm  (920 - 770)
+CART_TOP_THICKNESS  = 40     # mm
+CART_WHEEL_DIAM     = 125    # mm
+CART_WHEEL_WIDTH    = 30     # mm
+CART_HANDLE_EXT     = 145    # mm, handle extends beyond right end of body
 
 # Derived
-CART_BODY_HEIGHT = CART_TOTAL_HEIGHT - CART_TOP_THICKNESS - CART_WHEEL_HEIGHT
-CART_BODY_WIDTH  = CART_BODY_LENGTH  - 2 * CART_TOP_OVERHANG
-CART_BODY_DEPTH  = CART_DEPTH        - 2 * CART_TOP_OVERHANG
-CART_WIDTH       = CART_BODY_LENGTH   # alias used in build function
+CART_BODY_HEIGHT    = CART_BODY_HEIGHT_NO_WHEEL  # excl. wheels = 770 mm
+CART_TOP_OVERHANG   = (CART_TOTAL_LENGTH - CART_BODY_LENGTH) // 2  # ~22 mm each side
+                      # (approximate — handle is right-side only, but top likely overhangs evenly)
 
-# Number of drawers per column and columns
-DRAWER_COLS   = 3
-DRAWER_ROWS   = 7   # approximate visible rows in main columns
-DRAWER_H_SMALL = CART_BODY_HEIGHT / 10     # small drawers
-DRAWER_H_LARGE = CART_BODY_HEIGHT / 5      # large bottom drawer
-DRAWER_INSET  = 3   # how much drawer face is recessed from body face
+# ── Drawer geometry (inner dimensions, confirmed) ─────────────────────────────
+DRAWERS = [
+    # name,               inner_depth, inner_width, inner_height
+    ("top_large",          400, 960, 100),
+    ("col_left_1_thin",    400, 330,  45),
+    ("col_left_2_deep",    400, 330, 150),
+    ("col_mid_3_thin",     400, 570,  45),
+    ("col_mid_4_deep",     400, 570, 150),
+    ("col_right_5_thin",   400, 330,  45),
+    ("col_right_6_deep",   400, 330, 200),
+]
 
-# Handle
-HANDLE_R      = 12    # tube radius mm
-HANDLE_OFFSET = 60    # protrusion from side panel
 
-# ── Build functions ───────────────────────────────────────────────────────────
+# ── Build ─────────────────────────────────────────────────────────────────────
 
-def _make_wheel(r=40, h=30):
-    """Simple caster wheel (cylinder)."""
-    return cq.Workplane("XY").cylinder(h, r)
+def _caster(wheel_diam: float, wheel_w: float, total_h: float):
+    """One swivel caster as a combined cylinder."""
+    r = wheel_diam / 2
+    fork_h = total_h - wheel_diam
+    wheel = cq.Workplane("XY").cylinder(wheel_w, r)
+    fork  = cq.Workplane("XY").box(wheel_w + 6, 20, fork_h).translate((0, 0, wheel_diam + fork_h / 2))
+    return wheel.union(fork)
 
 
 def make_hbm_tool_cart(
-    width: float = CART_BODY_LENGTH,
-    depth: float = CART_DEPTH,
-    total_height: float = CART_TOTAL_HEIGHT,
+    body_length:   float = CART_BODY_LENGTH,
+    total_length:  float = CART_TOTAL_LENGTH,
+    depth:         float = CART_DEPTH,
+    total_height:  float = CART_TOTAL_HEIGHT,
+    wheel_height:  float = CART_WHEEL_HEIGHT,
     top_thickness: float = CART_TOP_THICKNESS,
-    wheel_height: float = CART_WHEEL_HEIGHT,
-    top_overhang: float = CART_TOP_OVERHANG,
-    handle_length: float = CART_TOTAL_LENGTH - CART_BODY_LENGTH,
+    handle_ext:    float = CART_HANDLE_EXT,
 ) -> Assembly:
     """
-    Return a CadQuery Assembly representing the HBM 146cm tool cart.
+    Return a CadQuery Assembly for the HBM 146cm tool cart.
 
-    Origin: floor-level centre of the cart footprint (X, Y) at Z=0.
-    The cart extends:
-        X: -width/2  … +width/2
-        Y: -depth/2  … +depth/2
-        Z: 0         … total_height
+    Origin: floor-level centre of cart body footprint (X, Y) at Z=0.
+    The BODY extends:
+        X: -body_length/2  …  +body_length/2
+        Y: -depth/2        …  +depth/2
+        Z: 0               …  total_height
+    The handle protrudes to +X beyond body_length/2.
     """
-    body_h  = total_height - top_thickness - wheel_height
-    body_w  = width  - 2 * top_overhang
-    body_d  = depth  - 2 * top_overhang
+    body_h  = total_height - top_thickness - wheel_height  # metal cabinet = 730 mm
+    wood_z  = wheel_height + body_h + top_thickness / 2
+    body_z  = wheel_height + body_h / 2
 
     assy = Assembly(name="hbm_tool_cart")
 
-    # ── Cabinet body ─────────────────────────────────────────────────────────
-    body = (
-        cq.Workplane("XY")
-        .box(body_w, body_d, body_h)
-    )
-    body_z = wheel_height + body_h / 2
-    assy.add(
-        body,
-        name="body",
-        color=Color("black"),
-        loc=Location(Vector(0, 0, body_z)),
-    )
+    # ── Cabinet body (metal box) ──────────────────────────────────────────────
+    body = cq.Workplane("XY").box(body_length, depth, body_h)
+    assy.add(body, name="body", color=Color(0.08, 0.08, 0.08, 1.0),
+             loc=Location(Vector(0, 0, body_z)))
 
-    # ── Drawer faces (simplified flat rectangles on front face) ───────────────
-    col_w  = body_w / 3
-    row_h  = body_h / 10   # approximate even rows
+    # ── Drawer fronts (simplified flat faces on front of cabinet) ─────────────
+    # Column layout: left 330mm, mid 570mm, right 330mm  (sum ~1230mm < body)
+    col_specs = [(-450, 330), (0, 570), (450, 330)]   # (x_center, width) approx
+    row_heights = [45, 150, 45, 150, 45, 200, 45]     # approximate row heights
 
-    for col in range(3):
-        for row in range(10):
-            x_off = -body_w / 2 + col * col_w + col_w / 2
-            z_off  = wheel_height + row * row_h + row_h / 2
-            drawer_face = (
-                cq.Workplane("XY")
-                .box(col_w - 4, 4, row_h - 4)
-            )
+    z_cursor = wheel_height
+    for row_idx, rh in enumerate(row_heights):
+        for col_x, col_w in col_specs:
+            face = cq.Workplane("XY").box(col_w - 6, 6, rh - 4)
             assy.add(
-                drawer_face,
-                name=f"drawer_c{col}_r{row}",
-                color=Color(0.3, 0.3, 0.3, 1.0),
-                loc=Location(Vector(
-                    x_off,
-                    -body_d / 2 - 2,    # sits just proud of front face
-                    z_off,
-                )),
+                face,
+                name=f"drawer_r{row_idx}_cx{int(col_x)}",
+                color=Color(0.25, 0.25, 0.25, 1.0),
+                loc=Location(Vector(col_x, -depth / 2 - 3, z_cursor + rh / 2)),
             )
+        z_cursor += rh
 
-    # ── Wood top ─────────────────────────────────────────────────────────────
-    top = cq.Workplane("XY").box(width, depth, top_thickness)
-    top_z = wheel_height + body_h + top_thickness / 2
-    assy.add(
-        top,
-        name="wood_top",
-        color=Color(0.76, 0.60, 0.35, 1.0),   # warm wood colour
-        loc=Location(Vector(0, 0, top_z)),
-    )
+    # Top large drawer (full width, near top of column area)
+    top_la = cq.Workplane("XY").box(body_length - 20, 6, 100 - 4)
+    assy.add(top_la, name="drawer_top_large", color=Color(0.25, 0.25, 0.25, 1.0),
+             loc=Location(Vector(0, -depth / 2 - 3, z_cursor + 48)))
 
-    # ── Wheels (6 casters) ───────────────────────────────────────────────────
-    wheel_r  = 50
-    wheel_h  = wheel_height - 20    # caster fork height above wheel
-    wx_positions = [-body_w / 2 + 60, 0, body_w / 2 - 60]
-    wy_positions = [-body_d / 2 + 50, body_d / 2 - 50]
+    # ── Wood top ──────────────────────────────────────────────────────────────
+    # Top overhangs body slightly on all sides; extends full total_length in X
+    top = cq.Workplane("XY").box(total_length - handle_ext, depth + 30, top_thickness)
+    assy.add(top, name="wood_top", color=Color(0.72, 0.52, 0.30, 1.0),
+             loc=Location(Vector(0, 0, wood_z)))
 
-    for i, wx in enumerate(wx_positions):
-        for j, wy in enumerate(wy_positions):
-            wheel = _make_wheel(r=wheel_r * 0.6, h=wheel_r * 1.0)
-            assy.add(
-                wheel,
-                name=f"wheel_{i}_{j}",
-                color=Color(0.2, 0.2, 0.2, 1.0),
-                loc=Location(Vector(wx, wy, wheel_r * 0.5)),
-            )
+    # ── Casters (6 total: 3 pairs front/back) ────────────────────────────────
+    wx_pos = [-body_length / 2 + 80,  0,  body_length / 2 - 80]
+    wy_pos = [-depth / 2 + 30,  depth / 2 - 30]
+    for i, wx in enumerate(wx_pos):
+        for j, wy in enumerate(wy_pos):
+            caster = _caster(CART_WHEEL_DIAM, CART_WHEEL_WIDTH, wheel_height)
+            assy.add(caster, name=f"caster_{i}_{j}",
+                     color=Color(0.15, 0.15, 0.15, 1.0),
+                     loc=Location(Vector(wx, wy, 0)))
 
-    # ── Side handle (right side, stainless tube) ─────────────────────────────
-    handle_z  = wheel_height + body_h + 5   # just below wood top
-    handle_x  = body_w / 2 + HANDLE_OFFSET
-    handle    = (
-        cq.Workplane("XZ")
-        .center(handle_x, handle_z)
-        .circle(HANDLE_R)
-        .extrude(80)            # grip length
-    )
-    assy.add(
-        handle,
-        name="handle",
-        color=Color(0.8, 0.8, 0.8, 1.0),   # stainless
-        loc=Location(Vector(0, 0, 0)),
-    )
+    # ── Side handle (right side, stainless tube) ──────────────────────────────
+    handle_x = body_length / 2 + handle_ext / 2
+    handle_z = wheel_height + body_h - 60
+    handle_bar = cq.Workplane("XY").box(handle_ext, 25, 25)
+    assy.add(handle_bar, name="handle", color=Color(0.75, 0.75, 0.75, 1.0),
+             loc=Location(Vector(handle_x, 0, handle_z)))
 
     return assy
 
 
 def get_bom() -> list[dict]:
-    """Bill of materials / spec summary for documentation."""
+    """Spec summary for documentation."""
     return [
         {
-            "part": "HBM Gereedschapswagen 146cm (zwart)",
+            "part": "HBM Gereedschapswagen 146cm (zwart) — art. 4945",
             "qty": 1,
             "length_body_mm": CART_BODY_LENGTH,
             "length_total_mm": CART_TOTAL_LENGTH,
             "depth_mm": CART_DEPTH,
             "height_mm": CART_TOTAL_HEIGHT,
-            "top_mm": CART_TOP_THICKNESS,
-            "note": "All dimensions confirmed from product spec.",
+            "wheel_height_mm": CART_WHEEL_HEIGHT,
+            "top_thickness_mm": CART_TOP_THICKNESS,
+            "weight_kg": 125,
+            "max_load_kg": 750,
+            "drawers": 20,
+            "price_eur": 699.99,
             "url": "https://www.hbm-machines.com/nl/p/hbm-verrijdbare-gereedschapswagen-met-houten-werkblad-146-cm-zwart",
         }
     ]
 
 
-# ── Quick preview ─────────────────────────────────────────────────────────────
+# ── Quick test ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     assy = make_hbm_tool_cart()
-    print("HBM Tool Cart assembly built successfully.")
-    for item in get_bom():
-        print(f"  {item['part']}")
-        print(f"    body {item['length_body_mm']} × {item['depth_mm']} × {item['height_mm']} mm")
-        print(f"    total length incl. handle: {item['length_total_mm']} mm")
-        print(f"    {item['note']}")
+    item = get_bom()[0]
+    print(f"HBM Tool Cart assembly built successfully.")
+    print(f"  Body:   {item['length_body_mm']} × {item['depth_mm']} × {item['height_mm']} mm")
+    print(f"  Total:  {item['length_total_mm']} mm (incl. handle)")
+    print(f"  Wheels: {item['wheel_height_mm']} mm caster height")
+    print(f"  Top:    {item['top_thickness_mm']} mm wood")
+    print(f"  Weight: {item['weight_kg']} kg  |  Max load: {item['max_load_kg']} kg")
