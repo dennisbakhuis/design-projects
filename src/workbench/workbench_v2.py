@@ -1,10 +1,9 @@
 """
-Workbench v2 — CadQuery model (self-contained).
+Workbench v2 — CadQuery model.
 
 Defines the full workshop workbench geometry including L-shaped tabletop,
 legs, stretchers, aprons, slat walls, and layout props (D12 twinsets,
-HBM tool cart). All helper objects are inlined — this file has zero local
-dependencies.
+HBM tool cart).
 
 Run with:
     uv run python src/workbench/workbench_v2.py --svg
@@ -13,473 +12,19 @@ Run with:
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import cadquery as cq
 from cadquery import Assembly, Color, Location, Vector
 
-
-# ── D12 Twinset helper ────────────────────────────────────────────────────────
-
-# ── D12 cylinder dimensions ──────────────────────────────────────────────────
-
-TANK_DIAMETER = 172
-TANK_RADIUS = TANK_DIAMETER / 2
-TANK_BODY_HEIGHT = 550
-TANK_DOME_HEIGHT = 45
-TANK_TOTAL_HEIGHT = TANK_BODY_HEIGHT + 2 * TANK_DOME_HEIGHT
-
-# ── Valve & manifold ─────────────────────────────────────────────────────────
-# Each post valve sits on the tank neck. The knob angles outward and upward
-# (~35 deg from horizontal). The manifold bar connects the two valve bodies
-# with an isolator valve knob pointing upward from the center.
-
-VALVE_NECK_DIAMETER = 40
-VALVE_NECK_HEIGHT = 30
-VALVE_BODY_LENGTH = 60
-VALVE_BODY_WIDTH = 45
-VALVE_BODY_HEIGHT = 45
-VALVE_KNOB_DIAMETER = 32
-VALVE_KNOB_LENGTH = 45
-VALVE_KNOB_ANGLE = 0
-DIN_PORT_DIAMETER = 38
-DIN_PORT_DEPTH = 15
-
-MANIFOLD_BAR_WIDTH = 22
-MANIFOLD_BAR_HEIGHT = 22
-ISOLATOR_KNOB_DIAMETER = 32
-ISOLATOR_KNOB_LENGTH = 40
-
-# ── Band clamps (V4TEC style) ────────────────────────────────────────────────
-# Two sets of rings around each cylinder, connected by a flat piece between
-# the tanks. An M8 threaded rod runs through the center hole between the
-# tanks, sticking out on one side.
-
-BAND_WIDTH = 60
-BAND_THICKNESS = 3
-BAND_FLAT_WIDTH = 20
-BAND_FLAT_THICKNESS = 3
-BAND_HOLE_SPACING = 279
-BAND_TOP_Z = 530
-BAND_POSITIONS = [BAND_TOP_Z, BAND_TOP_Z - BAND_HOLE_SPACING]
-
-M8_ROD_DIAMETER = 8
-M8_ROD_PROTRUSION = TANK_RADIUS - 25
-
-# ── Twin-set spacing ─────────────────────────────────────────────────────────
-# Bolt spacing (center-to-center) is 203mm for GUE manifold.
-
-CYLINDER_SPACING = 203
-CYLINDER_GAP = CYLINDER_SPACING - TANK_DIAMETER
-
-COLOR_STEEL = Color(0.86, 0.86, 0.86)
-COLOR_CHROME = Color(0.75, 0.75, 0.75)
-COLOR_BLACK = Color(0.12, 0.12, 0.12)
-
-
-def loc(x, y, z):
-    return Location(Vector(x, y, z))
-
-
-# ── Single cylinder ──────────────────────────────────────────────────────────
-
-
-def make_tank_body():
-    """Cylindrical body with rounded top and bottom domes."""
-    body = cq.Workplane("XY").circle(TANK_RADIUS).extrude(TANK_BODY_HEIGHT)
-
-    dome = (
-        cq.Workplane("XZ")
-        .center(0, 0)
-        .moveTo(0, 0)
-        .lineTo(TANK_RADIUS, 0)
-        .threePointArc((TANK_RADIUS * 0.7, TANK_DOME_HEIGHT), (0, TANK_DOME_HEIGHT))
-        .close()
-        .revolve(360, (0, 0, 0), (0, 1, 0))
-    )
-
-    body = body.union(dome.translate((0, 0, TANK_BODY_HEIGHT)))
-    body = body.union(dome.mirror("XY"))
-    return body
-
-
-# ── Post valve (left or right) ───────────────────────────────────────────────
-
-
-def make_post_valve(side="left"):
-    """Post valve with neck, body, angled knob, and DIN port.
-
-    Parameters
-    ----------
-    side : str
-        "left" or "right" — determines knob direction.
-    """
-    sign = -1 if side == "left" else 1
-
-    neck = cq.Workplane("XY").circle(VALVE_NECK_DIAMETER / 2).extrude(VALVE_NECK_HEIGHT)
-
-    body_z = VALVE_NECK_HEIGHT
-    body_center_z = body_z + VALVE_BODY_HEIGHT / 2
-    body = (
-        cq.Workplane("XY")
-        .box(VALVE_BODY_LENGTH, VALVE_BODY_WIDTH, VALVE_BODY_HEIGHT)
-        .translate((0, 0, body_center_z))
-    )
-
-    knob = (
-        cq.Workplane("XY")
-        .circle(VALVE_KNOB_DIAMETER / 2)
-        .extrude(VALVE_KNOB_LENGTH)
-        .translate((0, 0, VALVE_BODY_WIDTH / 2))
-        .rotate((0, 0, 0), (0, 1, 0), sign * (90 - VALVE_KNOB_ANGLE))
-        .translate((0, 0, body_center_z))
-    )
-
-    din_port = (
-        cq.Workplane("XY")
-        .circle(DIN_PORT_DIAMETER / 2)
-        .extrude(DIN_PORT_DEPTH)
-        .rotate((0, 0, 0), (1, 0, 0), 90)
-        .translate((0, -VALVE_BODY_WIDTH / 2, body_center_z))
-    )
-
-    return neck.union(body).union(knob).union(din_port)
-
-
-# ── Manifold ─────────────────────────────────────────────────────────────────
-
-
-def make_manifold_bar():
-    """Horizontal bar connecting the two valves."""
-    return cq.Workplane("XY").box(CYLINDER_SPACING, MANIFOLD_BAR_WIDTH, MANIFOLD_BAR_HEIGHT)
-
-
-def make_isolator_knob():
-    """Upward-pointing isolator knob for center of manifold."""
-    return (
-        cq.Workplane("XY")
-        .circle(ISOLATOR_KNOB_DIAMETER / 2)
-        .extrude(ISOLATOR_KNOB_LENGTH)
-        .translate((0, 0, MANIFOLD_BAR_HEIGHT / 2))
-    )
-
-
-# ── Band clamp ───────────────────────────────────────────────────────────────
-
-
-def make_band():
-    """Two rings around each cylinder with a flat connector and M8 rod."""
-    wrap_outer = TANK_RADIUS + BAND_THICKNESS
-    half_spacing = CYLINDER_SPACING / 2
-
-    left_ring = (
-        cq.Workplane("XY")
-        .circle(wrap_outer)
-        .circle(TANK_RADIUS)
-        .extrude(BAND_WIDTH)
-        .translate((-half_spacing, 0, 0))
-    )
-
-    right_ring = (
-        cq.Workplane("XY")
-        .circle(wrap_outer)
-        .circle(TANK_RADIUS)
-        .extrude(BAND_WIDTH)
-        .translate((half_spacing, 0, 0))
-    )
-
-    flat_connector = (
-        cq.Workplane("XY")
-        .box(CYLINDER_GAP, BAND_FLAT_WIDTH, BAND_WIDTH)
-        .translate((0, 0, BAND_WIDTH / 2))
-    )
-
-    rod = (
-        cq.Workplane("XY")
-        .circle(M8_ROD_DIAMETER / 2)
-        .extrude(M8_ROD_PROTRUSION + BAND_FLAT_THICKNESS)
-        .rotate((0, 0, 0), (1, 0, 0), 90)
-        .translate((0, -BAND_FLAT_WIDTH / 2, BAND_WIDTH / 2))
-    )
-
-    return left_ring.union(right_ring).union(flat_connector).union(rod)
-
-
-# ── Full twinset assembly ────────────────────────────────────────────────────
-
-
-def make_d12_twinset():
-    """Assemble the complete D12 double tank with valves, manifold, and bands.
-
-    Returns
-    -------
-    cq.Assembly
-        Origin at bottom-center of the twinset, tanks standing upright along Z.
-    """
-    assy = Assembly(name="d12_twinset")
-
-    tank_z_offset = TANK_DOME_HEIGHT
-    valve_z = tank_z_offset + TANK_BODY_HEIGHT + TANK_DOME_HEIGHT
-    manifold_z = valve_z + VALVE_NECK_HEIGHT + VALVE_BODY_HEIGHT / 2
-
-    half_spacing = CYLINDER_SPACING / 2
-
-    for side, x in [("left", -half_spacing), ("right", half_spacing)]:
-        assy.add(
-            make_tank_body(),
-            name=f"tank_{side}",
-            loc=loc(x, 0, tank_z_offset),
-            color=COLOR_STEEL,
-        )
-
-        assy.add(
-            make_post_valve(side),
-            name=f"valve_{side}",
-            loc=loc(x, 0, valve_z),
-            color=COLOR_BLACK,
-        )
-
-    assy.add(
-        make_manifold_bar(),
-        name="manifold_bar",
-        loc=loc(0, 0, manifold_z),
-        color=COLOR_CHROME,
-    )
-
-    assy.add(
-        make_isolator_knob(),
-        name="isolator_knob",
-        loc=loc(0, 0, manifold_z),
-        color=COLOR_BLACK,
-    )
-
-    for i, z_pos in enumerate(BAND_POSITIONS):
-        assy.add(
-            make_band(),
-            name=f"band_{i}",
-            loc=loc(0, 0, z_pos),
-            color=COLOR_CHROME,
-        )
-
-    return assy
-
-
-# ── HBM Tool Cart helper ──────────────────────────────────────────────────────
-#
-# HBM Verrijdbare Gereedschapswagen met Houten Werkblad — 146 cm (zwart)
-# CadQuery prop / helper object for workspace layout planning.
-#
-# Product: https://www.hbm-machines.com/nl/p/hbm-verrijdbare-gereedschapswagen-met-houten-werkblad-146-cm-zwart
-# Artikelnummer: 4945  |  EAN: 7435125878907  |  Prijs: €699,99 incl. btw
-#
-# ── Confirmed dimensions (from product spec) ────────────────────────────────
-#   Outer (incl. wielen + handvat):  1610 × 460 × 920 mm  (L × B × H)
-#   Body only (excl. accessoires):   1465 × 460 × 770 mm
-#   Wielen diameter:  125 mm  |  breedte: 30 mm
-#   Wiel-hoogte (caster assembly):   920 - 770 = 150 mm
-#   Houten blad dikte: 40 mm
-#   Handvat-uitsteek:  1610 - 1465 = 145 mm (rechter zijkant)
-#   Gewicht: 125 kg  |  Max belasting: 750 kg  |  Laden: 20
-
-# ── Parameters (all confirmed from product spec) ──────────────────────────────
-
-CART_BODY_LENGTH    = 1465   # mm, cabinet body without handle
-CART_TOTAL_LENGTH   = 1610   # mm, including side handle
-CART_DEPTH          = 460    # mm
-CART_TOTAL_HEIGHT   = 920    # mm, floor to top of wood surface
-CART_BODY_HEIGHT_NO_WHEEL = 770   # mm, body without wheel assembly
-CART_WHEEL_HEIGHT   = 150    # mm  (920 - 770)
-CART_TOP_THICKNESS  = 40     # mm
-CART_WHEEL_DIAM     = 125    # mm
-CART_WHEEL_WIDTH    = 30     # mm
-CART_HANDLE_EXT     = 145    # mm, handle extends beyond right end of body
-
-# Derived
-CART_BODY_HEIGHT    = CART_BODY_HEIGHT_NO_WHEEL  # excl. wheels = 770 mm
-CART_TOP_OVERHANG   = (CART_TOTAL_LENGTH - CART_BODY_LENGTH) // 2  # ~22 mm each side
-# (approximate — handle is right-side only, but top likely overhangs evenly)
-
-# ── Drawer geometry (inner dimensions, confirmed) ─────────────────────────────
-DRAWERS = [
-    # name,               inner_depth, inner_width, inner_height
-    ("top_large",          400, 960, 100),
-    ("col_left_1_thin",    400, 330,  45),
-    ("col_left_2_deep",    400, 330, 150),
-    ("col_mid_3_thin",     400, 570,  45),
-    ("col_mid_4_deep",     400, 570, 150),
-    ("col_right_5_thin",   400, 330,  45),
-    ("col_right_6_deep",   400, 330, 200),
-]
-
-
-# ── Build ─────────────────────────────────────────────────────────────────────
-
-def _caster(wheel_diam: float, wheel_w: float, total_h: float):
-    """
-    Swivel caster: wheel (cylinder on its side, rotating around Y-axis)
-    + mounting stem above it.
-    wheel_diam = 125 mm, wheel_w = 30 mm (tread width), total_h = 150 mm
-    """
-    r = wheel_diam / 2
-    # Wheel: cylinder rotating around Y-axis → extrude in Y, centred at wheel centre height
-    wheel = (
-        cq.Workplane("XZ")       # face in XZ plane → extrude along Y
-        .circle(r)
-        .extrude(wheel_w / 2, both=True)   # symmetric ±15 mm in Y
-        .translate((0, 0, r))              # lift to z = r from floor
-    )
-    # Mounting fork/stem above wheel
-    fork_h = total_h - wheel_diam
-    fork = (
-        cq.Workplane("XY")
-        .box(20, wheel_w + 10, fork_h)
-        .translate((0, 0, wheel_diam + fork_h / 2))
-    )
-    return wheel.union(fork)
-
-
-def make_hbm_tool_cart(
-    body_length:   float = CART_BODY_LENGTH,
-    total_length:  float = CART_TOTAL_LENGTH,
-    depth:         float = CART_DEPTH,
-    total_height:  float = CART_TOTAL_HEIGHT,
-    wheel_height:  float = CART_WHEEL_HEIGHT,
-    top_thickness: float = CART_TOP_THICKNESS,
-    handle_ext:    float = CART_HANDLE_EXT,
-) -> Assembly:
-    """
-    Return a CadQuery Assembly for the HBM 146cm tool cart.
-
-    Origin: floor-level centre of cart body footprint (X, Y) at Z=0.
-    The BODY extends:
-        X: -body_length/2  …  +body_length/2
-        Y: -depth/2        …  +depth/2
-        Z: 0               …  total_height
-    The handle protrudes to +X beyond body_length/2.
-    """
-    body_h  = total_height - top_thickness - wheel_height  # metal cabinet = 730 mm
-    wood_z  = wheel_height + body_h + top_thickness / 2
-    body_z  = wheel_height + body_h / 2
-
-    assy = Assembly(name="hbm_tool_cart")
-
-    # ── Cabinet body (metal box) ──────────────────────────────────────────────
-    body = cq.Workplane("XY").box(body_length, depth, body_h)
-    assy.add(body, name="body", color=Color(0.08, 0.08, 0.08, 1.0),
-             loc=Location(Vector(0, 0, body_z)))
-
-    # ── Drawer layout ──────────────────────────────────────────────────────────
-    # 3 columns: Left 330mm, Centre 570mm, Right 330mm → total span 1230mm
-    col_specs   = [(-450, 330), (0, 570), (450, 330)]
-    row_heights = [45, 150, 45, 150, 45, 200]   # 6 rows = 635mm total
-
-    z_cursor = wheel_height
-    for row_idx, rh in enumerate(row_heights):
-        for col_x, col_w in col_specs:
-            face = cq.Workplane("XY").box(col_w - 6, 6, rh - 4)
-            assy.add(
-                face,
-                name=f"drawer_r{row_idx}_cx{int(col_x)}",
-                color=Color(0.25, 0.25, 0.25, 1.0),
-                loc=Location(Vector(col_x, -depth / 2 - 3, z_cursor + rh / 2)),
-            )
-        z_cursor += rh   # z_cursor now = wheel_height + 635 = 785mm
-
-    # Top large drawer: sits above 3 columns, below wood top
-    # Columns end at z=785, wood top bottom at z=880 → 95mm gap
-    # Use 85mm height with 5mm clearance top and bottom
-    col_total_w = 330 + 570 + 330   # 1230mm — match column span exactly
-    top_la_h    = 85
-    top_la_z    = z_cursor + 5      # 5mm gap above columns
-    top_la = cq.Workplane("XY").box(col_total_w, 6, top_la_h)
-    assy.add(top_la, name="drawer_top_large", color=Color(0.25, 0.25, 0.25, 1.0),
-             loc=Location(Vector(0, -depth / 2 - 3, top_la_z + top_la_h / 2)))
-
-    # ── Wood top ──────────────────────────────────────────────────────────────
-    # Top overhangs body slightly on all sides; extends full total_length in X
-    top = cq.Workplane("XY").box(total_length - handle_ext, depth + 30, top_thickness)
-    assy.add(top, name="wood_top", color=Color(0.72, 0.52, 0.30, 1.0),
-             loc=Location(Vector(0, 0, wood_z)))
-
-    # ── Casters (6 total: 4 corners + 2 middle) ──────────────────────────────
-    corner_x = body_length / 2 - 60
-    corner_y = depth / 2 - 40
-    caster_positions = [
-        (-corner_x, -corner_y), (-corner_x,  corner_y),   # left corners
-        (       0,  -corner_y), (       0,   corner_y),    # middle pair
-        ( corner_x, -corner_y), ( corner_x,  corner_y),   # right corners
-    ]
-    for i, (wx, wy) in enumerate(caster_positions):
-        caster = _caster(CART_WHEEL_DIAM, CART_WHEEL_WIDTH, wheel_height)
-        assy.add(caster, name=f"caster_{i}",
-                 color=Color(0.15, 0.15, 0.15, 1.0),
-                 loc=Location(Vector(wx, wy, 0)))
-
-    # ── Handle: U-grip on RIGHT END panel ────────────────────────────────────
-    # Top-down shape:
-    #   body right ──arm_left(X)──┐
-    #                             grip(Y)
-    #   body right ──arm_right(X)─┘
-    #
-    # Cylinders created along Z (default) then rotated to correct axis.
-    # arm length = 100 mm, grip span = 160 mm, radius = 14 mm.
-
-    arm_z      = wheel_height + body_h * 0.78   # ~720 mm from floor
-    arm_length = 131                             # protrusion in +X, mm  (1465+131+14=1610 ✓)
-    span_y     = 160                             # grip bar length in Y, mm
-    r          = 14                              # tube radius, mm
-
-    # Arms: cylinder along Z, rotate 90° around Y → axis becomes X
-    arm_left = (
-        cq.Workplane("XY")
-        .cylinder(arm_length, r)
-        .rotate((0, 0, 0), (0, 1, 0), 90)
-        .translate((body_length / 2 + arm_length / 2, -span_y / 2, arm_z))
-    )
-    arm_right = (
-        cq.Workplane("XY")
-        .cylinder(arm_length, r)
-        .rotate((0, 0, 0), (0, 1, 0), 90)
-        .translate((body_length / 2 + arm_length / 2, +span_y / 2, arm_z))
-    )
-    # Grip bar: cylinder along Z, rotate -90° around X → axis becomes Y
-    grip = (
-        cq.Workplane("XY")
-        .cylinder(span_y, r)
-        .rotate((0, 0, 0), (1, 0, 0), -90)
-        .translate((body_length / 2 + arm_length, 0, arm_z))
-    )
-
-    handle_shape = arm_left.union(arm_right).union(grip)
-    assy.add(handle_shape, name="handle", color=Color(0.78, 0.78, 0.78, 1.0),
-             loc=Location(Vector(0, 0, 0)))
-
-    return assy
-
-
-def get_hbm_tool_cart_bom() -> list[dict]:
-    """Spec summary for the HBM tool cart (for documentation)."""
-    return [
-        {
-            "part": "HBM Gereedschapswagen 146cm (zwart) — art. 4945",
-            "qty": 1,
-            "length_body_mm": CART_BODY_LENGTH,
-            "length_total_mm": CART_TOTAL_LENGTH,
-            "depth_mm": CART_DEPTH,
-            "height_mm": CART_TOTAL_HEIGHT,
-            "wheel_height_mm": CART_WHEEL_HEIGHT,
-            "top_thickness_mm": CART_TOP_THICKNESS,
-            "weight_kg": 125,
-            "max_load_kg": 750,
-            "drawers": 20,
-            "price_eur": 699.99,
-            "url": "https://www.hbm-machines.com/nl/p/hbm-verrijdbare-gereedschapswagen-met-houten-werkblad-146-cm-zwart",
-        }
-    ]
+from helper_objects.d12_twinset import CYLINDER_SPACING, TANK_DIAMETER, loc, make_d12_twinset
+from helper_objects.hbm_tool_cart import make_hbm_tool_cart
 
 # ── Design parameters ────────────────────────────────────────────────────────
 
 TABLE_LENGTH = 2700
 TABLE_WIDTH = 800
-TABLE_THICKNESS = 52   # steamed beech 52 mm (per order)
+TABLE_THICKNESS = 52  # steamed beech 52 mm (per order)
 
 LEG_WIDTH = 80  # oak timber 80×80 mm (per order)
 LEG_DEPTH = 80
@@ -494,10 +39,10 @@ APRON_HEIGHT = 75  # matches stretcher cross-section
 APRON_THICKNESS = STRETCHER_WIDTH  # 50 mm, same as stretcher width
 
 # ── Mortise & Tenon joint dimensions ────────────────────────────────────────
-TENON_THICKNESS = 18   # mm  (from 50mm stock; 16mm shoulder each face)
-TENON_HEIGHT    = 60   # mm  (from 75mm stock; 7.5mm shoulder top & bottom)
-TENON_LENGTH    = 30   # mm  (depth into leg; leg is 75mm, leaves 45mm core)
-MORTISE_DEPTH   = 32   # mm  (2mm clearance at bottom vs tenon length)
+TENON_THICKNESS = 18  # mm  (from 50mm stock; 16mm shoulder each face)
+TENON_HEIGHT = 60  # mm  (from 75mm stock; 7.5mm shoulder top & bottom)
+TENON_LENGTH = 30  # mm  (depth into leg; leg is 75mm, leaves 45mm core)
+MORTISE_DEPTH = 32  # mm  (2mm clearance at bottom vs tenon length)
 
 # D12 twinset arrangement: 3 columns x 2 rows = 6 twinsets / 12 tanks
 TWINSET_COLS = 3
@@ -507,16 +52,16 @@ TWINSET_ROWS = 2
 SLAT_WIDTH = 20  # face width of each slat (X direction), mm
 SLAT_DEPTH = 15  # depth of each slat (Y direction), mm
 SLAT_GAP = 10  # gap between slats, mm
-SLAT_BOTTOM_Z = 20       # 2 cm above floor
+SLAT_BOTTOM_Z = 20  # 2 cm above floor
 SLAT_TOP_CLEARANCE = 10  # 1 cm below underside of top → slat = 970−20−10 = 940 mm
-SLAT_WALL_INSET = 10     # how far inside the leg front face the slat wall sits, mm
+SLAT_WALL_INSET = 10  # how far inside the leg front face the slat wall sits, mm
 
 EXT_DEPTH = 200
 EXT_LENGTH = 800  # mm — widened from 780 to give 34mm clearance left of twinsets
 FILLET_RADIUS = 100
 
 # Wall beam parameters (mounts flush against the wall at back of table)
-WALL_BEAM_WIDTH = 80   # oak timber 80×80 mm (per order)
+WALL_BEAM_WIDTH = 80  # oak timber 80×80 mm (per order)
 WALL_BEAM_HEIGHT = 80  # depth into wall (Y)
 WALL_BEAM_LENGTH = TABLE_LENGTH - 2 * STRETCHER_INSET  # inset on left and right sides
 
@@ -789,7 +334,10 @@ def get_bom():
             "width_mm": TABLE_LENGTH,
             "depth_mm": TABLE_WIDTH + EXT_DEPTH,
             "length_mm": TABLE_THICKNESS,
-            "note": f"L-shape {TABLE_LENGTH}×{TABLE_WIDTH}mm + ext. {EXT_LENGTH}×{EXT_DEPTH}mm — see drawing",
+            "note": (
+                f"L-shape {TABLE_LENGTH}×{TABLE_WIDTH}mm"
+                f" + ext. {EXT_LENGTH}×{EXT_DEPTH}mm — see drawing"
+            ),
         },
         # Front slats
         {
@@ -878,17 +426,31 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
 
     # ── Stretchers ──────────────────────────────────────────────────────
     for name, lx, ly, x, y, z in main_stretchers:
-        assy.add(box(lx, ly, STRETCHER_HEIGHT), name=f"s_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+        assy.add(
+            box(lx, ly, STRETCHER_HEIGHT),
+            name=f"s_{name}",
+            loc=loc(x, y, z),
+            color=Color("burlywood"),
+        )
     for name, lx, ly, x, y, z in ext_stretchers:
-        assy.add(box(lx, ly, STRETCHER_HEIGHT), name=f"se_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+        assy.add(
+            box(lx, ly, STRETCHER_HEIGHT),
+            name=f"se_{name}",
+            loc=loc(x, y, z),
+            color=Color("burlywood"),
+        )
     if stage < 2:
         return assy
 
     # ── Aprons + wall beam ───────────────────────────────────────────────
     for name, lx, ly, x, y, z in main_aprons:
-        assy.add(box(lx, ly, APRON_HEIGHT), name=f"a_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+        assy.add(
+            box(lx, ly, APRON_HEIGHT), name=f"a_{name}", loc=loc(x, y, z), color=Color("burlywood")
+        )
     for name, lx, ly, x, y, z in ext_aprons:
-        assy.add(box(lx, ly, APRON_HEIGHT), name=f"ae_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+        assy.add(
+            box(lx, ly, APRON_HEIGHT), name=f"ae_{name}", loc=loc(x, y, z), color=Color("burlywood")
+        )
     wall_beam_x = (right_x + left_x) / 2
     wall_beam_len = TABLE_LENGTH - 2 * STRETCHER_INSET
     assy.add(
@@ -916,24 +478,36 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
     front_slat_x_right = right_x - LEG_WIDTH / 2
     front_rail_span = front_slat_x_right - front_slat_x_left
     front_rail_mid_x = (front_slat_x_left + front_slat_x_right) / 2
-    assy.add(box(front_rail_span, STRETCHER_WIDTH, STRETCHER_HEIGHT), name="front_rail_bot",
-             loc=loc(front_rail_mid_x, rail_y, STRETCHER_Z), color=Color("peru"))
-    assy.add(box(front_rail_span, STRETCHER_WIDTH, APRON_HEIGHT), name="front_rail_top",
-             loc=loc(front_rail_mid_x, rail_y, APRON_Z), color=Color("peru"))
+    assy.add(
+        box(front_rail_span, STRETCHER_WIDTH, STRETCHER_HEIGHT),
+        name="front_rail_bot",
+        loc=loc(front_rail_mid_x, rail_y, STRETCHER_Z),
+        color=Color("peru"),
+    )
+    assy.add(
+        box(front_rail_span, STRETCHER_WIDTH, APRON_HEIGHT),
+        name="front_rail_top",
+        loc=loc(front_rail_mid_x, rail_y, APRON_Z),
+        color=Color("peru"),
+    )
     right_rail_x = right_x - LEG_WIDTH / 2 + STRETCHER_WIDTH / 2
     side_y_front = ext_front_leg_y + LEG_DEPTH / 2
     side_y_back = wall_back_y - LEG_DEPTH / 2
     right_rail_span = side_y_back - side_y_front
     right_rail_cy = (side_y_front + side_y_back) / 2
-    assy.add(box(STRETCHER_WIDTH, right_rail_span, APRON_HEIGHT), name="right_rail_top",
-             loc=loc(right_rail_x, right_rail_cy, APRON_Z), color=Color("peru"))
+    assy.add(
+        box(STRETCHER_WIDTH, right_rail_span, APRON_HEIGHT),
+        name="right_rail_top",
+        loc=loc(right_rail_x, right_rail_cy, APRON_Z),
+        color=Color("peru"),
+    )
     if stage < 5:
         return assy
 
     # ── Slats ─────────────────────────────────────────────────────────────
     # Slats: 2cm above floor → 1cm below tabletop underside (screw to mounting rails)
     slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE  # 940 mm
-    slat_z_ctr  = SLAT_BOTTOM_Z + slat_height / 2
+    slat_z_ctr = SLAT_BOTTOM_Z + slat_height / 2  # noqa: F841
 
     side_slat_x = ext_left_leg_x - LEG_WIDTH / 2 + SLAT_WALL_INSET + SLAT_DEPTH / 2
     # Position slats in FRONT of mounting rails (same formula as make_workbench)
@@ -947,9 +521,12 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
     arr_span_f = n_f * pitch - SLAT_GAP
     x0 = (slat_x_left + slat_x_right) / 2 - arr_span_f / 2 + SLAT_WIDTH / 2
     for i in range(n_f):
-        assy.add(box(SLAT_WIDTH, SLAT_DEPTH, slat_height), name=f"fs_{i}",
-                 loc=loc(x0 + i * pitch, front_slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
-                 color=Color("burlywood"))
+        assy.add(
+            box(SLAT_WIDTH, SLAT_DEPTH, slat_height),
+            name=f"fs_{i}",
+            loc=loc(x0 + i * pitch, front_slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
+            color=Color("burlywood"),
+        )
 
     side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2
     side_wall_y_back = wall_back_y - LEG_DEPTH / 2
@@ -959,9 +536,12 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
     arr_span_s = n_s * pitch - SLAT_GAP
     y0 = side_cy - arr_span_s / 2 + SLAT_WIDTH / 2
     for i in range(n_s):
-        assy.add(box(SLAT_DEPTH, SLAT_WIDTH, slat_height), name=f"ss_{i}",
-                 loc=loc(side_slat_x, y0 + i * pitch, SLAT_BOTTOM_Z + slat_height / 2),
-                 color=Color("burlywood"))
+        assy.add(
+            box(SLAT_DEPTH, SLAT_WIDTH, slat_height),
+            name=f"ss_{i}",
+            loc=loc(side_slat_x, y0 + i * pitch, SLAT_BOTTOM_Z + slat_height / 2),
+            color=Color("burlywood"),
+        )
 
     return assy
 
@@ -1037,8 +617,8 @@ def make_workbench(include_props: bool = True):
         #   = -1225 mm  →  +620 mm  (1845 mm wide)
         # Cart body 1465 mm centred at x = (-1225+620)/2 = -302.5 mm
         # Cart pushed to back: Y centre = (wall_back_y - LEG_DEPTH/2) - 460/2
-        cart_x = (left_x + LEG_WIDTH / 2 + ext_left_leg_x - LEG_WIDTH / 2) / 2   # -302.5 mm
-        cart_y = -TABLE_WIDTH / 2 + 50 + 460 / 2                                   # front face 50mm inset = -120 mm
+        cart_x = (left_x + LEG_WIDTH / 2 + ext_left_leg_x - LEG_WIDTH / 2) / 2  # -302.5 mm
+        cart_y = -TABLE_WIDTH / 2 + 50 + 460 / 2  # front face 50mm inset = -120 mm
         assy.add(
             make_hbm_tool_cart(),
             name="tool_cart",
@@ -1064,12 +644,12 @@ def make_workbench(include_props: bool = True):
                 )
 
     # ── Twinset front slat wall ───────────────────────────────────────────
-    column_spacing_val = TANK_DIAMETER + 30  # must match the twinset loop value
-    row_spacing_val = CYLINDER_SPACING + TANK_DIAMETER + 30
+    column_spacing_val = TANK_DIAMETER + 30  # must match the twinset loop value  # noqa: F841
+    row_spacing_val = CYLINDER_SPACING + TANK_DIAMETER + 30  # noqa: F841
 
     # X extent: between the inner faces of the extension legs (no clipping)
-    slat_wall_x_right = right_x - LEG_WIDTH / 2          # inner face of ext_front_right leg
-    slat_wall_x_left = ext_left_leg_x + LEG_WIDTH / 2    # inner face of ext_front_left leg
+    slat_wall_x_right = right_x - LEG_WIDTH / 2  # inner face of ext_front_right leg
+    slat_wall_x_left = ext_left_leg_x + LEG_WIDTH / 2  # inner face of ext_front_left leg
     slat_wall_width = slat_wall_x_right - slat_wall_x_left
     slat_wall_center_x = (slat_wall_x_right + slat_wall_x_left) / 2
 
@@ -1078,7 +658,7 @@ def make_workbench(include_props: bool = True):
     slat_wall_y = ext_front_y + STRETCHER_INSET + SLAT_WALL_INSET + SLAT_DEPTH / 2
 
     slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE  # 940 mm
-    slat_z_ctr  = SLAT_BOTTOM_Z + slat_height / 2
+    slat_z_ctr = SLAT_BOTTOM_Z + slat_height / 2
 
     for i, x_offset in enumerate(slat_wall_positions(slat_wall_width)):
         assy.add(
@@ -1112,8 +692,8 @@ def make_workbench(include_props: bool = True):
     side_slat_x = ext_left_leg_x - LEG_WIDTH / 2 + SLAT_WALL_INSET + SLAT_DEPTH / 2
 
     # Y span: between inner faces of front and back legs
-    side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2   # inner face of front leg
-    side_wall_y_back = wall_back_y - LEG_DEPTH / 2        # inner face of back leg
+    side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2  # inner face of front leg
+    side_wall_y_back = wall_back_y - LEG_DEPTH / 2  # inner face of back leg
     side_wall_span_y = side_wall_y_back - side_wall_y_front
     side_wall_center_y = (side_wall_y_front + side_wall_y_back) / 2
 
