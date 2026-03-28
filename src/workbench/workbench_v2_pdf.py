@@ -8,8 +8,10 @@ Outputs: src/workbench/workbench_v2_construction.pdf
 """
 
 import math
+import re
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import cadquery as cq
@@ -75,6 +77,46 @@ def svg_to_rl(svg_path, target_w, target_h):
     drawing.height = drawing.height * scale
     drawing.transform = (scale, 0, 0, scale, 0, 0)
     return drawing
+
+
+def parse_svg_transform(svg_path):
+    """Return (sx, sy, tx, ty, svg_w, svg_h) from the first group transform in a CadQuery SVG."""
+    try:
+        tree = ET.parse(str(svg_path))
+        root = tree.getroot()
+        svg_w = float(root.get('width', 1800))
+        svg_h = float(root.get('height', 1000))
+        for elem in root.iter():
+            t = elem.get('transform', '')
+            if t:
+                nums = re.findall(r'[-+]?\d+(?:\.\d+)?', t)
+                if len(nums) >= 4:
+                    sx, sy, tx, ty = (float(n) for n in nums[:4])
+                    return sx, sy, tx, ty, svg_w, svg_h
+    except Exception:
+        pass
+    return 1.0, -1.0, 0.0, 0.0, 1800.0, 1000.0
+
+
+def make_coord_converter(svg_path, rl_drawing, canvas_ox, canvas_oy):
+    """Return a callable (model_h, model_v) -> (canvas_x, canvas_y).
+
+    model_h: horizontal model coordinate (mm) for this view
+    model_v: vertical  model coordinate (mm) for this view (height = Z)
+    """
+    sx, sy, tx, ty, svg_w, svg_h = parse_svg_transform(svg_path)
+    rl_scale = rl_drawing.width / svg_w   # mm per SVG pixel (isotropic)
+
+    def convert(model_h: float, model_v: float):
+        # Apply SVG group transform (scale + translate, applied R→L)
+        svg_x = sx * (model_h + tx)
+        svg_y = sy * (model_v + ty)        # sy is negative → y-flip built-in
+        # RL has Y=0 at drawing bottom; SVG has Y=0 at top → flip
+        rl_x = svg_x * rl_scale
+        rl_y = (svg_h - svg_y) * rl_scale
+        return canvas_ox + rl_x, canvas_oy + rl_y
+
+    return convert
 
 
 def place_drawing(c, rl_drawing, area_x, area_y, area_w, area_h, label=""):
@@ -284,60 +326,89 @@ def page_bom(c, page_num, total_pages):
     c.showPage()
 
 
-def page_elevations(c, page_num, total_pages, front_rl, side_rl):
+def page_elevations(c, page_num, total_pages, front_rl, side_rl, front_svg, side_svg):
     content_y = MARGIN + TITLE_H + 4 * mm
     content_h = PAGE_H - content_y - MARGIN
     half_w = DRAW_W / 2 - 2 * mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(MARGIN, content_y + content_h + 2 * mm, "ELEVATIONS")
 
-    fx, fy, fw, fh = place_drawing(c, front_rl, MARGIN, content_y + 10 * mm, half_w, content_h - 10 * mm, "FRONT ELEVATION")
-    sx, sy, sw, sh = place_drawing(c, side_rl, MARGIN + half_w + 4 * mm, content_y + 10 * mm, half_w, content_h - 10 * mm, "RIGHT SIDE ELEVATION")
+    area_h = content_h - 10 * mm
+    fx, fy, fw, fh = place_drawing(c, front_rl, MARGIN,             content_y + 10*mm, half_w, area_h, "FRONT ELEVATION")
+    sx, sy, sw, sh = place_drawing(c, side_rl,  MARGIN+half_w+4*mm, content_y + 10*mm, half_w, area_h, "RIGHT SIDE ELEVATION")
 
     total_h = LEG_HEIGHT + TABLE_THICKNESS
+    half_L  = TABLE_LENGTH / 2
+    half_W  = TABLE_WIDTH  / 2
 
-    # Front elevation annotations
-    draw_dimension_line(c, fx, fy, fx + fw, fy,
+    # ── Front elevation: model horiz=X, model vert=Z ─────────────────────
+    fc = make_coord_converter(front_svg, front_rl, fx, fy)
+    fl_x,  f0_y    = fc(-half_L, 0)
+    fr_x,  _       = fc(+half_L, 0)
+    _,     ftop_y  = fc(0, total_h)
+    _,     fleg_y  = fc(0, LEG_HEIGHT)
+    _,     fstr_y  = fc(0, STRETCHER_Z)
+
+    draw_dimension_line(c, fl_x, f0_y, fr_x, f0_y,
                         f"{TABLE_LENGTH} mm", side="bottom", offset=7*mm)
-    draw_dimension_line(c, fx + fw, fy, fx + fw, fy + fh,
+    draw_dimension_line(c, fr_x, f0_y, fr_x, ftop_y,
                         f"{total_h} mm", side="right", offset=9*mm)
-    leg_y = fy + fh * LEG_HEIGHT / total_h
-    draw_dimension_line(c, fx + fw, fy, fx + fw, leg_y,
+    draw_dimension_line(c, fr_x, f0_y, fr_x, fleg_y,
                         f"{LEG_HEIGHT} mm", side="right", offset=20*mm)
-    str_y = fy + fh * STRETCHER_Z / total_h
-    draw_dimension_line(c, fx, fy, fx, str_y,
+    draw_dimension_line(c, fl_x, f0_y, fl_x, fstr_y,
                         f"{STRETCHER_Z} mm", side="left", offset=9*mm)
 
-    # Side elevation annotations
-    draw_dimension_line(c, sx, sy, sx + sw, sy,
+    # ── Side elevation: model horiz=Y (depth), model vert=Z ──────────────
+    sc = make_coord_converter(side_svg, side_rl, sx, sy)
+    sf_x, s0_y  = sc(-half_W, 0)
+    sb_x, _     = sc(+half_W, 0)
+    _,    stop_y = sc(0, total_h)
+
+    draw_dimension_line(c, sf_x, s0_y, sb_x, s0_y,
                         f"{TABLE_WIDTH} mm", side="bottom", offset=7*mm)
-    draw_dimension_line(c, sx + sw, sy, sx + sw, sy + sh,
+    draw_dimension_line(c, sb_x, s0_y, sb_x, stop_y,
                         f"{total_h} mm", side="right", offset=9*mm)
 
     draw_title_block(c, page_num, total_pages, "Elevations — Front & Right Side")
     c.showPage()
 
 
-def page_plan_iso(c, page_num, total_pages, top_rl, iso_rl):
+def page_plan_iso(c, page_num, total_pages, top_rl, iso_rl, top_svg):
     content_y = MARGIN + TITLE_H + 4 * mm
     content_h = PAGE_H - content_y - MARGIN
     half_w = DRAW_W / 2 - 2 * mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(MARGIN, content_y + content_h + 2 * mm, "PLAN & 3D VIEW")
 
-    tx, ty, tw, th = place_drawing(c, top_rl, MARGIN, content_y + 10 * mm, half_w, content_h - 10 * mm, "TOP PLAN")
-    place_drawing(c, iso_rl, MARGIN + half_w + 4 * mm, content_y + 10 * mm, half_w, content_h - 10 * mm, "ISOMETRIC VIEW")
+    area_h = content_h - 10 * mm
+    px, py, pw, ph = place_drawing(c, top_rl, MARGIN,             content_y + 10*mm, half_w, area_h, "TOP PLAN")
+    place_drawing(c, iso_rl, MARGIN + half_w + 4*mm, content_y + 10*mm, half_w, area_h, "ISOMETRIC VIEW")
 
-    # Top plan annotations
-    draw_dimension_line(c, tx, ty, tx + tw, ty,
+    half_L = TABLE_LENGTH / 2
+    half_W = TABLE_WIDTH  / 2
+
+    # ── Top plan: model horiz=X, model vert=Y (depth) ────────────────────
+    tc = make_coord_converter(top_svg, top_rl, px, py)
+    tl_x, tf_y  = tc(-half_L, -half_W)   # left-front corner
+    tr_x, _     = tc(+half_L, -half_W)   # right-front
+    _,    tb_y  = tc(0, +half_W)          # back edge
+
+    # Overall length (front edge, bottom)
+    draw_dimension_line(c, tl_x, tf_y, tr_x, tf_y,
                         f"{TABLE_LENGTH} mm", side="bottom", offset=7*mm)
-    draw_dimension_line(c, tx, ty, tx, ty + th,
+    # Main body depth (left side)
+    draw_dimension_line(c, tl_x, tf_y, tl_x, tb_y,
                         f"{TABLE_WIDTH} mm", side="left", offset=9*mm)
-    draw_dimension_line(c, tx + tw, ty, tx + tw, ty + th,
-                        f"{TABLE_WIDTH} mm", side="right", offset=9*mm)
-    ext_x = tx + tw * (1 - EXT_LENGTH / TABLE_LENGTH)
-    draw_dimension_line(c, ext_x, ty, tx + tw, ty,
+    # Extension: right portion width (bottom, second row)
+    ext_rx, _ = tc(+half_L, -half_W)
+    ext_lx, _ = tc(+half_L - EXT_LENGTH, -half_W)
+    draw_dimension_line(c, ext_lx, tf_y, ext_rx, tf_y,
                         f"{EXT_LENGTH} mm", side="bottom", offset=18*mm)
+    # Extension depth (right side, bottom section)
+    ext_back_y_val = -half_W + EXT_DEPTH     # top edge of extension in model Y
+    _, ext_fb_y = tc(+half_L, -half_W + EXT_DEPTH)
+    draw_dimension_line(c, ext_rx, tf_y, ext_rx, ext_fb_y,
+                        f"{EXT_DEPTH} mm", side="right", offset=9*mm)
 
     draw_title_block(c, page_num, total_pages, "Plan & Isometric")
     c.showPage()
@@ -1113,8 +1184,8 @@ def main():
     pn = 1
     page_title(c, pn, total_pages, iso_rl); pn += 1
     page_bom(c, pn, total_pages); pn += 1
-    page_elevations(c, pn, total_pages, front_rl, side_rl); pn += 1
-    page_plan_iso(c, pn, total_pages, top_rl, iso_rl); pn += 1
+    page_elevations(c, pn, total_pages, front_rl, side_rl, front_svg, side_svg); pn += 1
+    page_plan_iso(c, pn, total_pages, top_rl, iso_rl, top_svg); pn += 1
 
     for i, step in enumerate(IKEA_STEPS):
         stage_rl = svg_to_rl(stage_svgs[i], DRAW_W * 0.62 - 4 * mm, content_h - 20 * mm)
