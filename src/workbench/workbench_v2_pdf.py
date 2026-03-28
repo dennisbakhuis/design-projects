@@ -25,7 +25,7 @@ from workbench.workbench_v2 import (
     make_workbench, make_workbench_stage, get_bom, make_tabletop,
     TABLE_LENGTH, TABLE_WIDTH, LEG_HEIGHT, TABLE_THICKNESS,
     LEG_WIDTH, LEG_DEPTH, STRETCHER_WIDTH, APRON_THICKNESS, APRON_HEIGHT,
-    STRETCHER_HEIGHT, EXT_DEPTH, EXT_LENGTH, SLAT_WIDTH, SLAT_DEPTH,
+    STRETCHER_HEIGHT, EXT_DEPTH, EXT_LENGTH, FILLET_RADIUS, SLAT_WIDTH, SLAT_DEPTH,
     TENON_THICKNESS, TENON_HEIGHT, TENON_LENGTH, MORTISE_DEPTH,
 )
 
@@ -566,32 +566,32 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     ext_d = EXT_DEPTH * scale
     fillet_r = 100 * scale
 
-    # ── L-shape vertices (CORRECT ORIENTATION) ───────────────────────────
-    # Large surface (800mm) is the TOP portion of the drawing.
-    # Extension (200mm deep, EXT_LENGTH wide) is at the BOTTOM-RIGHT.
-    #
-    # Clockwise from top-left:
-    #   A = top-left      (ox,              oy + draw_h)
-    #   B = top-right     (ox + draw_w,     oy + draw_h)
-    #   C = step down-right (ox + draw_w,   oy + ext_d)      ← extension top-right
-    #   D = step left     (ox+draw_w-ext_l, oy + ext_d)      ← extension top-left
-    #   E = inner corner  (ox+draw_w-ext_l, oy)              ← fillet here
-    #   F = bottom-left   (ox,              oy)
+    # ── L-shape vertices ──────────────────────────────────────────────────
+    # Main body (800mm) at TOP, extension (200mm × EXT_LENGTH) at BOTTOM-RIGHT.
+    # Clockwise path from top-left:
+    #   A  top-left        (ox,              oy+draw_h)
+    #   B  top-right       (ox+draw_w,       oy+draw_h)
+    #   C  right-step      (ox+draw_w,       oy+ext_d)   ← right edge of extension
+    #   D  inner corner    (ox+draw_w-ext_l, oy+ext_d)   ← fillet here (inside corner at 800mm)
+    #   E  step bottom     (ox+draw_w-ext_l, oy)          ← sharp corner
+    #   F  bottom-left     (ox,              oy)
 
-    A = (ox,                    oy + draw_h)   # top-left
-    B = (ox + draw_w,           oy + draw_h)   # top-right
-    C = (ox + draw_w,           oy + ext_d)    # right side, extension top boundary
-    D = (ox + draw_w - ext_l,   oy + ext_d)    # inner step (horizontal boundary)
-    E_corner = (ox + draw_w - ext_l, oy)       # inner corner (fillet)
-    F = (ox,                    oy)            # bottom-left
+    A = (ox,                  oy + draw_h)
+    B = (ox + draw_w,         oy + draw_h)
+    C = (ox + draw_w,         oy + ext_d)
+    D = (ox + draw_w - ext_l, oy + ext_d)   # inside corner — has fillet
+    E_corner = (ox + draw_w - ext_l, oy)
+    F = (ox,                  oy)
 
-    # Arc at E (inside corner: path comes DOWN from D→E, then LEFT to F)
-    # Centre = (D[0] - fillet_r,  oy + fillet_r)
-    # East tangent (on D→E vertical):  (D[0],          oy + fillet_r)  → start angle = 0°
-    # South tangent (on E→F horizontal): (D[0]-fillet_r, oy)           → end angle  = 270° (= -90°)
-    # Sweep: clockwise → extent = -90
-    arc_cx = D[0] - fillet_r
-    arc_cy = oy + fillet_r
+    # Fillet at D (inside corner of L):
+    # Path arrives going LEFT (C→D), departs going DOWN (D→E).
+    # Arc is tangent to:
+    #   - horizontal C-D line from the RIGHT at (D[0]+fillet_r, oy+ext_d)  → 90° North
+    #   - vertical   D-E line from ABOVE  at (D[0],           oy+ext_d-fillet_r) → 180° West
+    # Arc centre = (D[0]+fillet_r, oy+ext_d-fillet_r) — inside the empty notch space.
+    # Sweep: CCW from 90° (North) by +90° → arrives at 180° (West).
+    arc_cx = D[0] + fillet_r
+    arc_cy = oy + ext_d - fillet_r
 
     c.setStrokeColor(colors.HexColor("#222222"))
     c.setFillColor(colors.HexColor("#f0e8d8"))
@@ -601,13 +601,14 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     p.moveTo(*A)
     p.lineTo(*B)
     p.lineTo(*C)
-    p.lineTo(*D)
-    # Line from D down to arc start (East tangent point), then arc CW to South
+    p.lineTo(D[0] + fillet_r, oy + ext_d)    # stop at arc-start tangent (fillet_r before D)
     p.arcTo(arc_cx - fillet_r, arc_cy - fillet_r,
             arc_cx + fillet_r, arc_cy + fillet_r,
-            0, -90)   # start East (0°), sweep CW -90° → end South (270°)
-    p.lineTo(*F)
-    p.lineTo(*A)
+            90, 90)                           # CCW from North (90°) +90° → West (180°)
+    # now at tangent end: (D[0], oy+ext_d-fillet_r)
+    p.lineTo(*E_corner)                       # straight down to sharp bottom corner
+    p.lineTo(*F)                              # left to bottom-left
+    p.lineTo(*A)                              # up to top-left
     p.close()
     c.drawPath(p, fill=1, stroke=1)
 
@@ -635,10 +636,10 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     draw_dimension_line(c, D[0], oy + ext_d, C[0], oy + ext_d,
                         f"{EXT_LENGTH} mm", side="bottom", offset=7*mm)
 
-    # Fillet label
+    # Fillet label — in the empty notch, just right of the arc
     c.setFont("Helvetica", 7)
     c.setFillColor(colors.HexColor("#555555"))
-    c.drawString(arc_cx + 2 * mm, arc_cy + 2 * mm, f"R {100} mm")
+    c.drawString(D[0] + fillet_r + 2 * mm, oy + ext_d - fillet_r - 4 * mm, f"R {FILLET_RADIUS} mm")
 
     # ── Plank division lines ──────────────────────────────────────────────
     # Main body: 4 planks × 200mm, measured from TOP of main body downward.
