@@ -567,96 +567,93 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     fillet_r = 100 * scale
 
     # The L-shape (top-view, Y=up on page):
-    # Corners (going clockwise from top-left):
-    # A = ox, oy+draw_h          (top-left)
-    # B = ox+draw_w, oy+draw_h   (top-right)
-    # C = ox+draw_w, oy+ext_d    (bottom-right)
-    # D = ox+draw_w-ext_l, oy+ext_d  (step inner-right)
-    # E = ox+draw_w-ext_l, oy     (step inner-left, inside corner — has fillet)
-    # F = ox, oy                  (bottom-left)
-    # Note: in paper coords Y increases upward, so 'top' = back of table (wall side)
+    # Extension is at TOP-RIGHT (back/wall side of bench, right end).
+    # Front of bench = bottom of drawing.
+    #
+    # Vertices clockwise from bottom-left:
+    # A = bottom-left  (ox, oy)
+    # B = bottom-right (ox+draw_w, oy)
+    # C = right, below extension (ox+draw_w, oy+main_d)
+    # D = step left (ox+draw_w-ext_l, oy+main_d)
+    # E = inside corner top (ox+draw_w-ext_l, oy+draw_h)  ← has fillet
+    # F = top-left (ox, oy+draw_h)
 
-    A = (ox,          oy + draw_h)
-    B = (ox + draw_w, oy + draw_h)
-    C = (ox + draw_w, oy + ext_d)
-    D = (ox + draw_w - ext_l, oy + ext_d)
-    # E is inside corner with fillet
-    E_corner = (ox + draw_w - ext_l, oy)
-    F = (ox, oy)
+    A = (ox,          oy)
+    B = (ox + draw_w, oy)
+    C = (ox + draw_w, oy + main_d)
+    D = (ox + draw_w - ext_l, oy + main_d)
+    E_corner = (ox + draw_w - ext_l, oy + draw_h)
+    F = (ox,          oy + draw_h)
 
     c.setStrokeColor(colors.HexColor("#222222"))
     c.setFillColor(colors.HexColor("#f0e8d8"))
     c.setLineWidth(1.2)
 
+    # Fillet at inside corner E (between D→E going UP and E→F going LEFT):
+    # Centre = (E_corner[0] - fillet_r, E_corner[1] - fillet_r)
+    arc_cx = E_corner[0] - fillet_r
+    arc_cy = E_corner[1] - fillet_r
+
     # Draw filled L-shape path
     p = c.beginPath()
     p.moveTo(*A)
-    p.lineTo(*B)
-    p.lineTo(*C)
-    p.lineTo(*D)
-    # fillet at inside corner E: draw arc
-    # Arc centre: (D[0] - fillet_r, E_corner[1] + fillet_r)
-    arc_cx = D[0] - fillet_r
-    arc_cy = E_corner[1] + fillet_r
+    p.lineTo(*F)
+    p.lineTo(E_corner[0], arc_cy + fillet_r)   # up to fillet start (East tangent point)
+    # Arc: start East (0°), sweep CCW +90° to North (90°)
     p.arcTo(arc_cx - fillet_r, arc_cy - fillet_r,
             arc_cx + fillet_r, arc_cy + fillet_r,
-            0, -90)  # start East (directly below D), sweep CW to South
-    p.lineTo(*F)
+            0, 90)
+    p.lineTo(*D)
+    p.lineTo(*C)
+    p.lineTo(*B)
     p.lineTo(*A)
     p.close()
     c.drawPath(p, fill=1, stroke=1)
 
     # ── Dimension lines ───────────────────────────────────────────────────
-    # Overall length (top, above shape)
-    draw_dimension_line(c, A[0], A[1], B[0], B[1], f"{TABLE_LENGTH} mm", side="top", offset=7*mm)
+    # Overall length (bottom, below shape)
+    draw_dimension_line(c, A[0], A[1], B[0], B[1], f"{TABLE_LENGTH} mm", side="bottom", offset=7*mm)
 
-    # Main depth (left side, full height)
+    # Total depth (left side, full height F→A)
     draw_dimension_line(c, F[0], F[1], A[0], A[1], f"{TABLE_WIDTH + EXT_DEPTH} mm", side="left", offset=9*mm)
 
-    # Main body depth only (right side, top portion)
+    # Main body depth (right side, B→C)
     draw_dimension_line(c, B[0], B[1], C[0], C[1], f"{TABLE_WIDTH} mm", side="right", offset=9*mm)
 
-    # Extension depth (right side, bottom portion)
-    draw_dimension_line(c, C[0], C[1], (ox + draw_w, oy)[0], (ox + draw_w, oy)[1],
+    # Extension depth (right side, C→top)
+    draw_dimension_line(c, C[0], C[1], ox + draw_w, oy + draw_h,
                         f"{EXT_DEPTH} mm", side="right", offset=9*mm)
 
-    # Extension width (bottom, ext portion only)
-    draw_dimension_line(c, D[0], D[1], C[0], D[1], f"{EXT_LENGTH} mm", side="bottom", offset=7*mm)
+    # Extension width (top, D→E horizontal)
+    draw_dimension_line(c, D[0], D[1], E_corner[0], D[1], f"{EXT_LENGTH} mm", side="top", offset=7*mm)
 
     # Fillet label
     c.setFont("Helvetica", 7)
     c.setFillColor(colors.HexColor("#555555"))
-    c.drawString(arc_cx + 2 * mm, arc_cy + 2 * mm, f"R {100} mm")
+    c.drawString(arc_cx - 8 * mm, arc_cy - 3 * mm, f"R {100} mm")
 
     # ── Plank division lines (main body: 4 × 200 mm planks) ──────────────
     # Planks run the full 2700mm in X, each 200mm wide in Y.
-    # Draw dashed lines at 200, 400, 600mm from the front (bottom of drawing).
-    PLANK_W_MM   = 200           # ordered: 200mm wide planks
+    # Measured from FRONT (bottom of drawing = oy).
+    PLANK_W_MM   = 200
     N_PLANKS     = TABLE_WIDTH // PLANK_W_MM   # = 4
-    plank_line_color = colors.HexColor("#8B6914")   # warm brown, visible on beige
+    plank_line_color = colors.HexColor("#8B6914")
 
     c.setStrokeColor(plank_line_color)
     c.setLineWidth(0.7)
-    c.setDash(4, 3)              # dashed: 4pt on, 3pt off
+    c.setDash(4, 3)
 
     for i in range(1, N_PLANKS):
-        py = oy + i * PLANK_W_MM * scale
-        # Full length of main body
-        c.line(ox, py, ox + draw_w, py)
+        py = oy + i * PLANK_W_MM * scale   # 200, 400, 600mm from front
+        c.line(ox, py, ox + draw_w, py)    # full width (all within main body ✓)
 
-    # Extension planks: 4 × 200mm wide, running 780mm in X.
-    # Grain runs in X (same direction as main planks).
-    # Extension Y span: oy to oy + ext_d (= 200mm, one plank deep).
-    # Show extension plank joints in X direction (4 pieces side-by-side in X).
-    ext_piece_w = EXT_LENGTH / 4   # ≈195mm each
-    for i in range(1, 4):
-        ex_x = (ox + draw_w - ext_l) + i * ext_piece_w * scale
-        c.line(ex_x, oy, ex_x, oy + ext_d)
+    # Extension: single plank (200mm wide = EXT_DEPTH), no internal Y-lines needed
+    # Only show as separate piece — already visible by the shape boundary
 
-    c.setDash()   # reset to solid
+    c.setDash()
     c.setLineWidth(0.5)
 
-    # Plank width label (left margin, first plank)
+    # Plank width label (left side, mid-plank)
     c.setFont("Helvetica", 6.5)
     c.setFillColor(plank_line_color)
     for i in range(N_PLANKS):
