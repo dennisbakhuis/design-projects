@@ -26,6 +26,7 @@ from workbench.workbench_v2 import (
     TABLE_LENGTH, TABLE_WIDTH, LEG_HEIGHT, TABLE_THICKNESS,
     LEG_WIDTH, LEG_DEPTH, STRETCHER_WIDTH, APRON_THICKNESS, APRON_HEIGHT,
     STRETCHER_HEIGHT, EXT_DEPTH, EXT_LENGTH, SLAT_WIDTH, SLAT_DEPTH,
+    TENON_THICKNESS, TENON_HEIGHT, TENON_LENGTH, MORTISE_DEPTH,
 )
 
 OUTPUT_DIR = Path(__file__).parent
@@ -302,6 +303,9 @@ IKEA_STEPS = [
         "icon": "2",
         "bullets": [
             "Cut stretchers from 50×75 mm timber (see BOM for lengths).",
+            "Cut mortises in legs: 18×60 mm, 32 mm deep, centred on face.",
+            "Cut tenons on stretcher ends: 18×60×30 mm, 16 mm shoulders.",
+            "Dry fit all joints before gluing.",
             "Position stretchers at 150 mm from floor (centre).",
             "Clamp in place and drill pocket-screw holes (Kreg jig or similar).",
             "Drive 2× 50 mm pocket screws per joint end. Do not overtighten.",
@@ -786,6 +790,174 @@ def page_timber_parts(c, page_num, total_pages):
     c.showPage()
 
 
+def page_joinery_detail(c, page_num, total_pages):
+    """Detail page: Mortise & Tenon joint drawings (pen & gat)."""
+    content_y = MARGIN + TITLE_H + 4 * mm
+    content_h = PAGE_H - content_y - MARGIN
+    half_w = DRAW_W / 2 - 4 * mm
+
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(colors.black)
+    c.drawString(MARGIN, content_y + content_h + 2 * mm, "VERBINDINGSDETAIL — PEN & GAT (M&T)")
+
+    SCALE = 1.7 * mm  # paper-pt per real-mm (gives ~85mm on paper for 50mm real)
+
+    # ── Derived drawing sizes (in points) ───────────────────────────────────
+    sw   = STRETCHER_WIDTH  * SCALE          # stretcher width (50mm → ~85mm paper)
+    sh   = STRETCHER_HEIGHT * SCALE          # stretcher height (75mm → ~127.5mm paper)
+    tt   = TENON_THICKNESS  * SCALE          # tenon thickness (18mm → ~30.6mm paper)
+    th   = TENON_HEIGHT     * SCALE          # tenon height (60mm → ~102mm paper)
+    tl   = TENON_LENGTH     * SCALE          # tenon length (30mm → ~51mm paper)
+    shl_w = (STRETCHER_WIDTH  - TENON_THICKNESS) / 2 * SCALE   # shoulder w = 16mm
+    shl_h = (STRETCHER_HEIGHT - TENON_HEIGHT)    / 2 * SCALE   # shoulder h = 7.5mm
+    lw   = LEG_WIDTH  * SCALE                # leg face width (75mm → ~127.5mm paper)
+    lh   = LEG_DEPTH  * SCALE                # leg face depth (75mm → ~127.5mm paper)
+    mw   = TENON_THICKNESS * SCALE           # mortise width = tenon thickness
+    mh   = TENON_HEIGHT    * SCALE           # mortise height = tenon height
+
+    # ── Notes at bottom of content area ─────────────────────────────────────
+    notes_h = 22 * mm
+    notes_y = content_y + 2 * mm
+    notes = [
+        "Verlijmen met D3 houtlijm. Pen volledig insmeren, gat droog laten.",
+        "Klemmen: 30 min. Uithardingstijd: 24h voor belasting.",
+        "Freesmachine met rechte frees of gatenboor + beitel.",
+    ]
+    c.setFont("Helvetica", 8)
+    c.setFillColor(colors.HexColor("#333333"))
+    for i, note in enumerate(notes):
+        c.drawString(MARGIN + 4 * mm, notes_y + (len(notes) - 1 - i) * 6 * mm, "\u2022 " + note)
+
+    # ── Panel layout ─────────────────────────────────────────────────────────
+    lp_x = MARGIN + 4 * mm
+    lp_y = content_y + notes_h + 2 * mm
+    lp_w = half_w - 8 * mm
+    lp_h = content_h - notes_h - 6 * mm
+
+    rp_x = MARGIN + half_w + 4 * mm
+    rp_y = lp_y
+    rp_w = lp_w
+    rp_h = lp_h
+
+    # ── Left panel: Tenon (side view of stretcher end, Y-Z plane) ────────────
+    # Center the total drawing (stretcher body + tenon extension) in the panel
+    draw_total_w = sw + tl
+    draw_total_h = sh
+    sx = lp_x + (lp_w - draw_total_w) / 2
+    sy = lp_y + 12 * mm + (lp_h - 12 * mm - draw_total_h) / 2  # 12mm for bottom label
+
+    # Stretcher cross-section body
+    c.setFillColor(colors.HexColor("#d4b896"))
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(1.2)
+    c.rect(sx, sy, sw, sh, fill=1, stroke=1)
+
+    # Tenon interior (darker, within the cross-section)
+    tenon_x = sx + shl_w
+    tenon_y = sy + shl_h
+    c.setFillColor(colors.HexColor("#b8925a"))
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(0.8)
+    c.rect(tenon_x, tenon_y, tt, th, fill=1, stroke=1)
+
+    # Tenon extension (part that projects into the mortise)
+    c.setFillColor(colors.HexColor("#c8a070"))
+    c.setStrokeColor(colors.HexColor("#555555"))
+    c.setLineWidth(0.8)
+    c.rect(sx + sw, tenon_y, tl, th, fill=1, stroke=1)
+
+    # Shoulder lines (dashed)
+    c.setStrokeColor(colors.HexColor("#666666"))
+    c.setLineWidth(0.5)
+    c.setDash(4, 3)
+    c.line(sx, tenon_y,        sx + sw, tenon_y)           # bottom shoulder (horiz)
+    c.line(sx, tenon_y + th,   sx + sw, tenon_y + th)      # top shoulder (horiz)
+    c.line(tenon_x,      sy,   tenon_x,      sy + sh)      # left shoulder (vert)
+    c.line(tenon_x + tt, sy,   tenon_x + tt, sy + sh)      # right shoulder (vert)
+    c.setDash()
+
+    # Dimension lines — tenon panel
+    draw_dimension_line(c, sx, sy, sx + sw, sy,
+                        f"{STRETCHER_WIDTH} mm", side="bottom", offset=8 * mm)
+    draw_dimension_line(c, sx, sy, tenon_x, sy,
+                        f"{int((STRETCHER_WIDTH - TENON_THICKNESS) // 2)} mm",
+                        side="bottom", offset=16 * mm)
+    draw_dimension_line(c, tenon_x, sy + sh, tenon_x + tt, sy + sh,
+                        f"{TENON_THICKNESS} mm", side="top", offset=6 * mm)
+    draw_dimension_line(c, sx, sy, sx, sy + sh,
+                        f"{STRETCHER_HEIGHT} mm", side="left", offset=10 * mm)
+    draw_dimension_line(c, sx + sw + tl, tenon_y, sx + sw + tl, tenon_y + th,
+                        f"{TENON_HEIGHT} mm", side="right", offset=8 * mm)
+    draw_dimension_line(c, sx + sw, tenon_y + th, sx + sw + tl, tenon_y + th,
+                        f"{TENON_LENGTH} mm", side="top", offset=6 * mm)
+
+    # Panel border and label
+    c.setLineWidth(0.3)
+    c.setStrokeColor(colors.HexColor("#aaaaaa"))
+    c.rect(lp_x, lp_y, lp_w, lp_h)
+    c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(colors.black)
+    c.drawCentredString(lp_x + lp_w / 2, lp_y + 3 * mm, "PEN (zijaanzicht eindvlak, Y-Z vlak)")
+
+    # ── Right panel: Mortise (front view of leg face, X-Z plane) ─────────────
+    leg_x = rp_x + (rp_w - lw) / 2
+    leg_y = rp_y + (rp_h - lh) / 2 + 5 * mm  # slightly above centre for bottom dims
+
+    # Leg face
+    c.setFillColor(colors.HexColor("#d4b896"))
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(1.2)
+    c.rect(leg_x, leg_y, lw, lh, fill=1, stroke=1)
+
+    # Mortise (centred on leg face)
+    m_x = leg_x + (lw - mw) / 2
+    m_y = leg_y + (lh - mh) / 2
+
+    c.setFillColor(colors.HexColor("#4a2a0a"))   # very dark = hole
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(0.8)
+    c.rect(m_x, m_y, mw, mh, fill=1, stroke=1)
+
+    # Centre lines (dashed)
+    c.setStrokeColor(colors.HexColor("#888888"))
+    c.setLineWidth(0.4)
+    c.setDash(3, 3)
+    c.line(leg_x, leg_y + lh / 2, leg_x + lw, leg_y + lh / 2)   # horizontal CL
+    c.line(leg_x + lw / 2, leg_y, leg_x + lw / 2, leg_y + lh)   # vertical CL
+    c.setDash()
+
+    # Dimension lines — mortise panel
+    draw_dimension_line(c, leg_x, leg_y, leg_x + lw, leg_y,
+                        f"{LEG_WIDTH} mm", side="bottom", offset=8 * mm)
+    draw_dimension_line(c, leg_x, leg_y, leg_x, leg_y + lh,
+                        f"{LEG_DEPTH} mm", side="left", offset=8 * mm)
+    draw_dimension_line(c, m_x, leg_y, m_x + mw, leg_y,
+                        f"{TENON_THICKNESS} mm", side="bottom", offset=16 * mm)
+    draw_dimension_line(c, leg_x + lw, m_y, leg_x + lw, m_y + mh,
+                        f"{TENON_HEIGHT} mm", side="right", offset=8 * mm)
+
+    # Mortise depth callout (inside leg face, right of mortise)
+    c.setFont("Helvetica", 7)
+    c.setFillColor(colors.HexColor("#222222"))
+    depth_note_x = m_x + mw + 4 * mm
+    depth_note_y = m_y + mh / 2 - 2 * mm
+    c.drawString(depth_note_x, depth_note_y, f"Diepte: {MORTISE_DEPTH} mm")
+    c.setLineWidth(0.4)
+    c.setStrokeColor(colors.HexColor("#555555"))
+    c.line(m_x + mw, m_y + mh / 2, depth_note_x - 1 * mm, depth_note_y + 2 * mm)
+
+    # Panel border and label
+    c.setLineWidth(0.3)
+    c.setStrokeColor(colors.HexColor("#aaaaaa"))
+    c.rect(rp_x, rp_y, rp_w, rp_h)
+    c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(colors.black)
+    c.drawCentredString(rp_x + rp_w / 2, rp_y + 3 * mm, "GAT (vooraanzicht pootvlak, X-Z vlak)")
+
+    draw_title_block(c, page_num, total_pages, "Verbindingsdetail — Pen & Gat (M&T)")
+    c.showPage()
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -836,7 +1008,7 @@ def main():
         iso = iso_compound(part)
         part_svgs[f"timber_{name}"] = export_temp_svg(iso, f"part_{name}", 800, 600, show_hidden=False)
 
-    total_pages = 1 + 1 + 1 + 1 + len(IKEA_STEPS) + 1 + 2  # title + BOM + elev + plan + ikea*6 + details + part drawings
+    total_pages = 1 + 1 + 1 + 1 + len(IKEA_STEPS) + 1 + 3  # title + BOM + elev + plan + ikea*6 + details + tabletop + joinery + timber
 
     half_w = DRAW_W / 2 - 2 * mm
     content_y = MARGIN + TITLE_H + 4 * mm
@@ -866,6 +1038,7 @@ def main():
     # Part drawings
     tabletop_iso_rl = svg_to_rl(part_svgs["tabletop_iso"], half_w - 4 * mm, content_h - 20 * mm)
     page_tabletop_drawing(c, pn, total_pages, tabletop_iso_rl); pn += 1
+    page_joinery_detail(c, pn, total_pages); pn += 1
     page_timber_parts(c, pn, total_pages); pn += 1
 
     c.save()

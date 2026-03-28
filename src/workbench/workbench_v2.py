@@ -28,6 +28,12 @@ STRETCHER_Z = 150
 APRON_HEIGHT = 75  # matches stretcher cross-section
 APRON_THICKNESS = STRETCHER_WIDTH  # 50 mm, same as stretcher width
 
+# ── Mortise & Tenon joint dimensions ────────────────────────────────────────
+TENON_THICKNESS = 18   # mm  (from 50mm stock; 16mm shoulder each face)
+TENON_HEIGHT    = 60   # mm  (from 75mm stock; 7.5mm shoulder top & bottom)
+TENON_LENGTH    = 30   # mm  (depth into leg; leg is 75mm, leaves 45mm core)
+MORTISE_DEPTH   = 32   # mm  (2mm clearance at bottom vs tenon length)
+
 # D12 twinset arrangement: 3 columns x 2 rows = 6 twinsets / 12 tanks
 TWINSET_COLS = 3
 TWINSET_ROWS = 2
