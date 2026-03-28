@@ -167,40 +167,38 @@ def make_hbm_tool_cart(
                  loc=Location(Vector(wx, wy, 0)))
 
     # ── Handle: U-grip on RIGHT END panel ────────────────────────────────────
-    # Shape (viewed from above / top-down):
+    # Top-down shape:
+    #   body right ──arm_left(X)──┐
+    #                             grip(Y)
+    #   body right ──arm_right(X)─┘
     #
-    #   cart body right face         grip bar (Y-axis)
-    #        |                            |
-    #        +---arm_left (X-axis) -------+
-    #        |                            |
-    #        +---arm_right(X-axis) -------+
-    #
-    # Everything is at the SAME height (arm_z).
-    # Arms run along X  →  box(grip_reach, arm_s, arm_s)
-    # Grip bar runs along Y →  box(arm_s, span_y, arm_s)
+    # Cylinders created along Z (default) then rotated to correct axis.
+    # arm length = 100 mm, grip span = 160 mm, radius = 14 mm.
 
-    arm_z     = wheel_height + body_h * 0.78   # ~720 mm — upper third of cabinet
-    grip_reach = handle_ext                     # 145 mm in +X direction
-    arm_s     = 25                              # tube cross-section mm
-    span_y    = 160                             # grip bar length in Y (hand-width)
+    arm_z      = wheel_height + body_h * 0.78   # ~720 mm from floor
+    arm_length = 100                             # protrusion in +X, mm
+    span_y     = 160                             # grip bar length in Y, mm
+    r          = 14                              # tube radius, mm
 
-    # Left arm  (at y = -span_y/2)
+    # Arms: cylinder along Z, rotate 90° around Y → axis becomes X
     arm_left = (
         cq.Workplane("XY")
-        .box(grip_reach, arm_s, arm_s)
-        .translate((body_length / 2 + grip_reach / 2, -span_y / 2, arm_z))
+        .cylinder(arm_length, r)
+        .rotate((0, 0, 0), (0, 1, 0), 90)
+        .translate((body_length / 2 + arm_length / 2, -span_y / 2, arm_z))
     )
-    # Right arm (at y = +span_y/2)
     arm_right = (
         cq.Workplane("XY")
-        .box(grip_reach, arm_s, arm_s)
-        .translate((body_length / 2 + grip_reach / 2, +span_y / 2, arm_z))
+        .cylinder(arm_length, r)
+        .rotate((0, 0, 0), (0, 1, 0), 90)
+        .translate((body_length / 2 + arm_length / 2, +span_y / 2, arm_z))
     )
-    # Grip bar: horizontal along Y at the tips of both arms
+    # Grip bar: cylinder along Z, rotate -90° around X → axis becomes Y
     grip = (
         cq.Workplane("XY")
-        .box(arm_s, span_y + arm_s, arm_s)
-        .translate((body_length / 2 + grip_reach, 0, arm_z))
+        .cylinder(span_y, r)
+        .rotate((0, 0, 0), (1, 0, 0), -90)
+        .translate((body_length / 2 + arm_length, 0, arm_z))
     )
 
     handle_shape = arm_left.union(arm_right).union(grip)
