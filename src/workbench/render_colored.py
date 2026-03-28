@@ -52,7 +52,7 @@ def render(
     cam.SetFocalPoint(-300, 0, 500)
     cam.SetViewUp(0, 0, 1)
     renderer.ResetCameraClippingRange()
-    cam.Zoom(2.2)
+    cam.Zoom(1.6)
 
     win = vtkRenderWindow()
     win.SetSize(width, height)
