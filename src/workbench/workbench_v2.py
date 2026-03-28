@@ -567,7 +567,7 @@ def make_workbench(include_props: bool = True):
         # Cart body 1465 mm centred at x = (-1225+620)/2 = -302.5 mm
         # Cart pushed to back: Y centre = (wall_back_y - LEG_DEPTH/2) - 460/2
         cart_x = (left_x + LEG_WIDTH / 2 + ext_left_leg_x - LEG_WIDTH / 2) / 2   # -302.5 mm
-        cart_y = (wall_back_y - LEG_DEPTH / 2) - 460 / 2                          # ~95 mm
+        cart_y = -TABLE_WIDTH / 2 + 50 + 460 / 2                                   # front face 50mm inset = -120 mm
         assy.add(
             make_hbm_tool_cart(),
             name="tool_cart",
