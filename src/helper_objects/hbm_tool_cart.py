@@ -66,11 +66,26 @@ DRAWERS = [
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 def _caster(wheel_diam: float, wheel_w: float, total_h: float):
-    """One swivel caster as a combined cylinder."""
+    """
+    Swivel caster: wheel (cylinder on its side, rotating around Y-axis)
+    + mounting stem above it.
+    wheel_diam = 125 mm, wheel_w = 30 mm (tread width), total_h = 150 mm
+    """
     r = wheel_diam / 2
+    # Wheel: cylinder rotating around Y-axis → extrude in Y, centred at wheel centre height
+    wheel = (
+        cq.Workplane("XZ")       # face in XZ plane → extrude along Y
+        .circle(r)
+        .extrude(wheel_w / 2, both=True)   # symmetric ±15 mm in Y
+        .translate((0, 0, r))              # lift to z = r from floor
+    )
+    # Mounting fork/stem above wheel
     fork_h = total_h - wheel_diam
-    wheel = cq.Workplane("XY").cylinder(wheel_w, r)
-    fork  = cq.Workplane("XY").box(wheel_w + 6, 20, fork_h).translate((0, 0, wheel_diam + fork_h / 2))
+    fork = (
+        cq.Workplane("XY")
+        .box(20, wheel_w + 10, fork_h)
+        .translate((0, 0, wheel_diam + fork_h / 2))
+    )
     return wheel.union(fork)
 
 
@@ -104,10 +119,20 @@ def make_hbm_tool_cart(
     assy.add(body, name="body", color=Color(0.08, 0.08, 0.08, 1.0),
              loc=Location(Vector(0, 0, body_z)))
 
-    # ── Drawer fronts (simplified flat faces on front of cabinet) ─────────────
-    # Column layout: left 330mm, mid 570mm, right 330mm  (sum ~1230mm < body)
-    col_specs = [(-450, 330), (0, 570), (450, 330)]   # (x_center, width) approx
-    row_heights = [45, 150, 45, 150, 45, 200, 45]     # approximate row heights
+    # ── Drawer layout ──────────────────────────────────────────────────────────
+    # Top large drawer: full width, directly below wood top
+    # Spec: 960mm wide × 400mm deep × 100mm high (inner dims)
+    top_la_h = 108   # outer height incl. face
+    top_la_z = wheel_height + body_h - top_la_h   # sits at top of cabinet body
+    top_la = cq.Workplane("XY").box(body_length - 10, 6, top_la_h - 4)
+    assy.add(top_la, name="drawer_top_large", color=Color(0.25, 0.25, 0.25, 1.0),
+             loc=Location(Vector(0, -depth / 2 - 3, top_la_z + top_la_h / 2)))
+
+    # 3 columns below the top drawer
+    # Left: 330mm, Centre: 570mm, Right: 330mm  → ~1230mm total (fits within body)
+    col_specs = [(-450, 330), (0, 570), (450, 330)]   # (x_centre, width)
+    col_height = body_h - top_la_h                     # remaining height for 3 cols
+    row_heights = [45, 150, 45, 150, 45, 200]          # 6 rows, ~635mm total
 
     z_cursor = wheel_height
     for row_idx, rh in enumerate(row_heights):
@@ -121,33 +146,53 @@ def make_hbm_tool_cart(
             )
         z_cursor += rh
 
-    # Top large drawer (full width, near top of column area)
-    top_la = cq.Workplane("XY").box(body_length - 20, 6, 100 - 4)
-    assy.add(top_la, name="drawer_top_large", color=Color(0.25, 0.25, 0.25, 1.0),
-             loc=Location(Vector(0, -depth / 2 - 3, z_cursor + 48)))
-
     # ── Wood top ──────────────────────────────────────────────────────────────
     # Top overhangs body slightly on all sides; extends full total_length in X
     top = cq.Workplane("XY").box(total_length - handle_ext, depth + 30, top_thickness)
     assy.add(top, name="wood_top", color=Color(0.72, 0.52, 0.30, 1.0),
              loc=Location(Vector(0, 0, wood_z)))
 
-    # ── Casters (6 total: 3 pairs front/back) ────────────────────────────────
-    wx_pos = [-body_length / 2 + 80,  0,  body_length / 2 - 80]
-    wy_pos = [-depth / 2 + 30,  depth / 2 - 30]
-    for i, wx in enumerate(wx_pos):
-        for j, wy in enumerate(wy_pos):
+    # ── Casters (4 total: one at each corner) ────────────────────────────────
+    corner_x = body_length / 2 - 60
+    corner_y = depth / 2 - 40
+    for i, wx in enumerate([-corner_x, corner_x]):
+        for j, wy in enumerate([-corner_y, corner_y]):
             caster = _caster(CART_WHEEL_DIAM, CART_WHEEL_WIDTH, wheel_height)
             assy.add(caster, name=f"caster_{i}_{j}",
                      color=Color(0.15, 0.15, 0.15, 1.0),
                      loc=Location(Vector(wx, wy, 0)))
 
-    # ── Side handle (right side, stainless tube) ──────────────────────────────
-    handle_x = body_length / 2 + handle_ext / 2
-    handle_z = wheel_height + body_h - 60
-    handle_bar = cq.Workplane("XY").box(handle_ext, 25, 25)
-    assy.add(handle_bar, name="handle", color=Color(0.75, 0.75, 0.75, 1.0),
-             loc=Location(Vector(handle_x, 0, handle_z)))
+    # ── Handle: vertical D-loop on LEFT END panel ─────────────────────────────
+    # Extends handle_ext mm beyond left end of body (-X direction)
+    handle_z_bot = wheel_height + body_h * 0.50
+    handle_z_top = wheel_height + body_h * 0.78
+    handle_h     = handle_z_top - handle_z_bot
+    grip_reach   = handle_ext           # how far it sticks out from body end
+
+    # Two horizontal arms from body face, + vertical grip bar at the tip
+    arm_bottom = (
+        cq.Workplane("YZ")
+        .center(0, handle_z_bot)
+        .circle(14)
+        .extrude(grip_reach)
+        .translate((-body_length / 2, 0, 0))
+    )
+    arm_top = (
+        cq.Workplane("YZ")
+        .center(0, handle_z_top)
+        .circle(14)
+        .extrude(grip_reach)
+        .translate((-body_length / 2, 0, 0))
+    )
+    grip = (
+        cq.Workplane("XZ")
+        .center(-body_length / 2 - grip_reach, handle_z_bot + handle_h / 2)
+        .circle(14)
+        .extrude(200)           # grip bar spans 200 mm in Y, centred
+    )
+    handle_shape = arm_bottom.union(arm_top).union(grip)
+    assy.add(handle_shape, name="handle", color=Color(0.78, 0.78, 0.78, 1.0),
+             loc=Location(Vector(0, 0, 0)))
 
     return assy
 
