@@ -7,7 +7,7 @@ Veilingstraat 46, 7833 HN Nieuw Amsterdam
 Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
 **Prijslijst:** 19 november 2025  
-**Ontwerp:** werkbench_v2 — blad 2700×800 mm + uitbouw 780×200 mm, poten 970 mm hoog (werkhoogte blad ±1022 mm)
+**Ontwerp:** werkbench_v2 — blad 2700×800 mm + uitbouw 800×200 mm, poten 970 mm hoog (werkhoogte blad ±1022 mm)
 
 ---
 
@@ -15,10 +15,10 @@ Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
 > Vier planken op maximale lengte (380 cm). Elke plank levert:
 > - 270 cm voor het hoofdblad (4 × 200 mm breed = 800 mm totaalbreedte)
-> - 110 cm reststuk → 4 stuks à 80 cm voor de uitbouw (4 × 200 mm = 800 mm breed, inkorten naar 780 mm)
+> - 110 cm reststuk → 4 stuks à 80 cm voor de uitbouw (4 × 200 mm = 800 mm breed, geen inkorten nodig)
 >
 > Op het werkblad zijn de planken met de draad gelijmd (edge-glued).
-> Werkbladdikte 52 mm (ontwerp: 40 mm — upgraden voor extra massa en stabiliteit).
+> Werkbladdikte 52 mm.
 
 | Dikte | Breedte | Lengte | Stuks | Totaal volume |
 |-------|---------|--------|-------|---------------|
@@ -26,7 +26,7 @@ Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
 **Knipmaten (ter plekke of thuis):**
 - Hoofdblad: 4 × 270 cm (reststuk 110 cm per plank bewaren)
-- Uitbouw: 4 × 80 cm uit de reststukken; inkorten naar 78 cm breedte
+- Uitbouw: 4 × 80 cm uit de reststukken; breedte = 80 cm (geen inkorten nodig)
 
 **Geraamde prijs:** 0,158 m³ × €1.380/m³ = **≈ €218 excl. btw**
 
@@ -71,7 +71,7 @@ Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 | Dwarsverbinding uitbouw — onder  | 52 × 75 × 800     | 1     |
 | Apron links — boven              | 52 × 75 × 800     | 1     |
 | Apron uitbouw — boven            | 52 × 75 × 950     | 1     |
-| Montageregel voorzijde (× 2)     | 52 × 75 × 530     | 2     |
+| Montageregel voorzijde (× 2)     | 52 × 75 × 540     | 2     |
 | Montageregel rechterzijde boven  | 52 × 75 × 800     | 1     |
 | **Totaal**                       |                   | **7** |
 
