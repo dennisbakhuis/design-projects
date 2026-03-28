@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from helper_objects import make_d12_twinset
 from helper_objects.d12_tanks.d12_tanks import CYLINDER_SPACING, TANK_DIAMETER
+from helper_objects.hbm_tool_cart import make_hbm_tool_cart
 
 # ── Design parameters ────────────────────────────────────────────────────────
 
@@ -560,6 +561,19 @@ def make_workbench(include_props: bool = True):
     )
 
     if include_props:
+        # ── HBM tool cart — stored in segment A (left section under bench) ────
+        # Segment A inner X span: left_x+LEG_WIDTH/2  →  ext_left_leg_x-LEG_WIDTH/2
+        #   = -1225 mm  →  +620 mm  (1845 mm wide)
+        # Cart body 1465 mm centred at x = (-1225+620)/2 = -302.5 mm
+        # Cart pushed to back: Y centre = (wall_back_y - LEG_DEPTH/2) - 460/2
+        cart_x = (left_x + LEG_WIDTH / 2 + ext_left_leg_x - LEG_WIDTH / 2) / 2   # -302.5 mm
+        cart_y = (wall_back_y - LEG_DEPTH / 2) - 460 / 2                          # ~95 mm
+        assy.add(
+            make_hbm_tool_cart(),
+            name="tool_cart",
+            loc=Location(Vector(cart_x, cart_y, 0)),
+        )
+
         # ── D12 twinsets: 3 columns x 2 rows = 6 twinsets / 12 tanks ─────────
         # Twinsets are rotated 90° around Z so cylinders are side-by-side in Y.
         # Anchored to the back-right corner; back row is closest to the wall.
