@@ -47,7 +47,7 @@ SLAT_TOP_CLEARANCE = 15  # clearance below tabletop underside, mm
 SLAT_WALL_INSET = 10     # how far inside the leg front face the slat wall sits, mm
 
 EXT_DEPTH = 200
-EXT_LENGTH = TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET + 30
+EXT_LENGTH = 800  # mm — widened from 780 to give 34mm clearance left of twinsets
 FILLET_RADIUS = 100
 
 # Wall beam parameters (mounts flush against the wall at back of table)
