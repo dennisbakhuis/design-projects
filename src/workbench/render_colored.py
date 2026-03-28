@@ -46,10 +46,10 @@ def render(
     for act in toVTKAssy(assy):
         renderer.AddActor(act)
 
-    # Explicit camera: front-right, low enough to see cart under the bench
+    # Camera: front-right, low angle — shows cart (left) and tanks (right)
     cam = renderer.GetActiveCamera()
-    cam.SetPosition(4500, -3500, 2200)
-    cam.SetFocalPoint(-300, 0, 600)
+    cam.SetPosition(6000, -2000, 1400)
+    cam.SetFocalPoint(-300, 200, 500)
     cam.SetViewUp(0, 0, 1)
     renderer.ResetCameraClippingRange()
 
