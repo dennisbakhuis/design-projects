@@ -17,7 +17,7 @@ TABLE_THICKNESS = 40
 
 LEG_WIDTH = 75  # standard 75x75 mm planed timber
 LEG_DEPTH = 75
-LEG_HEIGHT = 960
+LEG_HEIGHT = 970
 
 STRETCHER_WIDTH = 50  # standard 50x75 mm planed timber
 STRETCHER_HEIGHT = 75

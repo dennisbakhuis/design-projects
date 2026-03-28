@@ -7,7 +7,7 @@ Veilingstraat 46, 7833 HN Nieuw Amsterdam
 Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
 **Prijslijst:** 19 november 2025  
-**Ontwerp:** werkbench_v2 — blad 2700×800 mm + uitbouw 780×200 mm, poten 960 mm hoog
+**Ontwerp:** werkbench_v2 — blad 2700×800 mm + uitbouw 780×200 mm, poten 970 mm hoog (werkhoogte blad ±1022 mm)
 
 ---
 
@@ -41,10 +41,10 @@ Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
 | Afmeting | Lengte | Stuks | Gebruik                            |
 |----------|--------|-------|------------------------------------|
-| 80×80 mm | 300 cm | 3     | 6 poten (× 96 cm) + wandbalk (260 cm) |
+| 80×80 mm | 300 cm | 3     | 6 poten (× 97 cm) + wandbalk (260 cm) |
 
 **Knipmaten:**
-- Poten: 6 × 96 cm uit 2 balken van 3 m
+- Poten: 6 × 97 cm uit 2 balken van 3 m (= 582 cm, past in 600 cm ✓)
 - Wandbalk: 1 × 260 cm uit 1 balk van 3 m
 
 **Geraamde prijs:** 3 × 3,0 m × €9,15/m = **≈ €82 excl. btw**
