@@ -232,8 +232,8 @@ def get_bom():
     front_rail_span = (right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2)
     right_rail_span = abs(wall_back_y - LEG_DEPTH / 2 - (ext_front_leg_y + LEG_DEPTH / 2))
 
-    # Slat counts
-    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
+    # Slat counts — height between mounting rails
+    slat_height = (APRON_Z - APRON_HEIGHT / 2) - (STRETCHER_Z + STRETCHER_HEIGHT / 2)
     front_wall_span = (right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2)
     n_front_slats = int(front_wall_span // (SLAT_WIDTH + SLAT_GAP))
     side_wall_span = (wall_back_y - LEG_DEPTH / 2) - (ext_front_leg_y + LEG_DEPTH / 2)
@@ -470,7 +470,12 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
         return assy
 
     # ── Slats ─────────────────────────────────────────────────────────────
-    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
+    # Slats fit between the two mounting rails (no clipping)
+    slat_z_bot = STRETCHER_Z + STRETCHER_HEIGHT / 2   # top of bottom rail
+    slat_z_top = APRON_Z - APRON_HEIGHT / 2            # bottom of top rail
+    slat_height = slat_z_top - slat_z_bot              # ≈ 707.5 mm
+    slat_z_ctr  = (slat_z_bot + slat_z_top) / 2
+
     side_slat_x = ext_left_leg_x - LEG_WIDTH / 2 + SLAT_WALL_INSET + SLAT_DEPTH / 2
     front_slat_wall_y = ext_front_leg_y + LEG_DEPTH / 2 - SLAT_WALL_INSET - SLAT_DEPTH / 2
 
@@ -483,7 +488,7 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
     x0 = (slat_x_left + slat_x_right) / 2 - arr_span_f / 2 + SLAT_WIDTH / 2
     for i in range(n_f):
         assy.add(box(SLAT_WIDTH, SLAT_DEPTH, slat_height), name=f"fs_{i}",
-                 loc=loc(x0 + i * pitch, front_slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
+                 loc=loc(x0 + i * pitch, front_slat_wall_y, slat_z_ctr),
                  color=Color("burlywood"))
 
     side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2
@@ -495,7 +500,7 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
     y0 = side_cy - arr_span_s / 2 + SLAT_WIDTH / 2
     for i in range(n_s):
         assy.add(box(SLAT_DEPTH, SLAT_WIDTH, slat_height), name=f"ss_{i}",
-                 loc=loc(side_slat_x, y0 + i * pitch, SLAT_BOTTOM_Z + slat_height / 2),
+                 loc=loc(side_slat_x, y0 + i * pitch, slat_z_ctr),
                  color=Color("burlywood"))
 
     return assy
@@ -612,13 +617,16 @@ def make_workbench(include_props: bool = True):
     # Leg front face is at ext_front_y + STRETCHER_INSET; slat sits SLAT_WALL_INSET mm behind it
     slat_wall_y = ext_front_y + STRETCHER_INSET + SLAT_WALL_INSET + SLAT_DEPTH / 2
 
-    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
+    slat_z_bot  = STRETCHER_Z + STRETCHER_HEIGHT / 2
+    slat_z_top  = APRON_Z - APRON_HEIGHT / 2
+    slat_height = slat_z_top - slat_z_bot
+    slat_z_ctr  = (slat_z_bot + slat_z_top) / 2
 
     for i, x_offset in enumerate(slat_wall_positions(slat_wall_width)):
         assy.add(
             box(SLAT_WIDTH, SLAT_DEPTH, slat_height),
             name=f"slat_{i}",
-            loc=loc(slat_wall_center_x + x_offset, slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
+            loc=loc(slat_wall_center_x + x_offset, slat_wall_y, slat_z_ctr),
             color=Color("burlywood"),
         )
 

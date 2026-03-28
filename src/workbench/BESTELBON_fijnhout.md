@@ -96,14 +96,14 @@ Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
 > Voor de decoratieve lattenwand aan voor- en zijkant van het werkblad (D12-twinset opslagvak).
 >
-> - Voorzijde: 17 latten à 940 mm
-> - Zijkant:   26 latten à 940 mm
-> - Totaal: **43 latten** van 20 × 15 × 940 mm
+> - Voorzijde: 17 latten à 708 mm
+> - Zijkant:   26 latten à 708 mm
+> - Totaal: **43 latten** van 20 × 15 × 708 mm
 >
 > Bestellen als 27 mm planken, daarna op maat zagen:
 > - Scheur elke plank in stroken van 20 mm breed (10 stroken per plank van 200 mm)
 > - Elke strook op dikte herscheuren naar 15 mm (kan thuis of via zaagservice)
-> - Kap elke strook op 940 mm → 3 latten per strook van 300 cm (met 18 cm uitval)
+> - Kap elke strook op 708 mm → 4 latten per strook van 300 cm (met 16 cm uitval)
 >
 > Uit 2 planken: 10 stroken × 2 = 20 stroken → 60 latten mogelijk (43 nodig ✓)
 
@@ -113,8 +113,8 @@ Tel: 0591 552504 · info@fijnhoutdrenthe.nl · www.fijnhoutdrenthe.nl
 
 > **Capaciteitsberekening (met 3 mm zaagsnede):**
 > - 8 stroken à 20 mm breed per plank (200 mm / 23 mm per snede)
-> - 3 latten à 940 mm per strook (3000 mm / 943 mm per snede)
-> - Opbrengst: 3 × 8 × 3 = **72 latten** — nodig: 43 → marge: 29 stuks ✓
+> - 4 latten à 708 mm per strook (3000 mm / 711 mm per snede, 16 cm uitval)
+> - Opbrengst: 3 × 8 × 4 = **96 latten** — nodig: 43 → marge: 53 stuks ✓ (kan met 2 planken toe)
 
 **Geraamde prijs:** 0,049 m³ × €1.380/m³ = **≈ €67 excl. btw (€81 incl. btw)**
 
