@@ -173,6 +173,10 @@ def get_bom() -> list[dict]:
     ]
 
 
+# ── Top-level result for cq-editor / cq-designer ─────────────────────────────
+result = make_hbm_tool_cart()
+
+
 # ── Quick test ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     assy = make_hbm_tool_cart()
