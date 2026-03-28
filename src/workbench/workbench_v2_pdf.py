@@ -921,60 +921,210 @@ def _draw_iso_box(c, ox, oy, w, d, h, scale, label, dims_text):
         c.drawCentredString(ox, oy - 5 * mm - i * 4 * mm, txt)
 
 
+def _draw_part_cell(c, bx, by, bw, bh, name, w_mm, d_mm, l_mm, qty, note=""):
+    """Draw one part cell: front face view + end cross-section + annotations.
+
+    bx,by: bottom-left corner of cell (pts)
+    bw,bh: cell width/height (pts)
+    w_mm : face width shown in front view (horizontal cross-section)
+    d_mm : depth shown in end section
+    l_mm : length of part
+    """
+    WOOD_FACE = colors.HexColor("#F0D090")
+    WOOD_END  = colors.HexColor("#C89850")
+    GRAIN     = colors.HexColor("#D8A860")
+
+    PAD      = 3 * mm
+    TITLE_H  = 10 * mm
+    ANN_BOT  = 9 * mm   # space for bottom annotation (length / width)
+    ANN_LEFT = 11 * mm  # space for left annotation (face height)
+    ANN_RIGHT= 10 * mm  # space for right annotation on end section
+    GAP      = 5 * mm   # gap between front and end drawing
+
+    # ── Title bar ────────────────────────────────────────────────────────
+    c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(colors.black)
+    c.drawString(bx + PAD, by + bh - TITLE_H + 3*mm, name)
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(colors.HexColor("#333333"))
+    c.drawRightString(bx + bw - PAD, by + bh - TITLE_H + 3*mm,
+                      f"{w_mm} × {d_mm} mm  ·  L = {l_mm} mm  ·  ×{qty}")
+    c.setStrokeColor(colors.HexColor("#bbbbbb"))
+    c.setLineWidth(0.3)
+    c.line(bx, by + bh - TITLE_H, bx + bw, by + bh - TITLE_H)
+
+    # ── Drawing area bounds ───────────────────────────────────────────────
+    da_x = bx + PAD + ANN_LEFT
+    da_y = by + PAD + ANN_BOT
+    da_w = bw - PAD - ANN_LEFT - PAD   # full width minus left pad+annotation and right pad
+    da_h = bh - TITLE_H - PAD - ANN_BOT - PAD
+
+    # ── End section (right side of cell) ─────────────────────────────────
+    # Scale so it fills the full draw height (minus annotation space)
+    end_scale = (da_h - ANN_BOT) / max(w_mm, d_mm)
+    end_w_pt  = w_mm * end_scale
+    end_h_pt  = d_mm * end_scale
+    end_x = da_x + da_w - ANN_RIGHT - end_w_pt
+    end_y = da_y + ANN_BOT + (da_h - ANN_BOT - end_h_pt) / 2
+
+    # ── Front face (left side, fills remaining width) ────────────────────
+    front_avail_w = end_x - GAP - da_x
+    front_avail_h = da_h - ANN_BOT
+
+    # Scale: proportional, but enforce minimum face height of 10mm
+    MIN_FACE_H = 10 * mm
+    scale = min(front_avail_w / l_mm, front_avail_h / w_mm)
+    if w_mm * scale < MIN_FACE_H:
+        scale = MIN_FACE_H / w_mm
+    front_h_pt = w_mm * scale
+    front_w_pt = min(l_mm * scale, front_avail_w)  # clamp + break if needed
+    foreshortened = l_mm * scale > front_avail_w
+
+    front_x = da_x
+    front_y = da_y + ANN_BOT + (front_avail_h - front_h_pt) / 2
+
+    # ── Draw front face ───────────────────────────────────────────────────
+    c.setFillColor(WOOD_FACE)
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.7)
+    c.rect(front_x, front_y, front_w_pt, front_h_pt, fill=1, stroke=1)
+
+    # Grain lines
+    c.setStrokeColor(GRAIN)
+    c.setLineWidth(0.25)
+    n_grain = max(3, int(front_w_pt / (5 * mm)))
+    for i in range(1, n_grain + 1):
+        gx = front_x + i * front_w_pt / (n_grain + 1)
+        c.line(gx, front_y + 1, gx, front_y + front_h_pt - 1)
+
+    # Break line (zig-zag) if foreshortened
+    if foreshortened:
+        bk_x = front_x + front_w_pt * 0.65
+        bk_amp = front_h_pt * 0.35
+        bk_w   = 3 * mm
+        c.setFillColor(colors.white)
+        c.setStrokeColor(colors.white)
+        c.setLineWidth(3)
+        c.line(bk_x, front_y, bk_x, front_y + front_h_pt)
+        c.setStrokeColor(colors.black)
+        c.setLineWidth(0.7)
+        pts = [(bk_x - bk_w/2, front_y),
+               (bk_x + bk_w/2, front_y + front_h_pt * 0.35),
+               (bk_x - bk_w/2, front_y + front_h_pt * 0.65),
+               (bk_x + bk_w/2, front_y + front_h_pt)]
+        path = c.beginPath()
+        path.moveTo(*pts[0])
+        for pt in pts[1:]:
+            path.lineTo(*pt)
+        c.drawPath(path)
+
+    # ── Draw end section ─────────────────────────────────────────────────
+    c.setFillColor(WOOD_END)
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.7)
+    c.rect(end_x, end_y, end_w_pt, end_h_pt, fill=1, stroke=1)
+    # Cross-hatch end grain
+    c.saveState()
+    p = c.beginPath()
+    p.rect(end_x, end_y, end_w_pt, end_h_pt)
+    c.clipPath(p, stroke=0)
+    c.setStrokeColor(colors.HexColor("#A07030"))
+    c.setLineWidth(0.2)
+    step = max(end_w_pt, end_h_pt) / 5
+    for i in range(-6, 10):
+        x0 = end_x + i * step
+        c.line(x0, end_y, x0 + end_h_pt + end_w_pt, end_y + end_h_pt + end_w_pt)
+        c.line(x0, end_y + end_h_pt, x0 + end_h_pt + end_w_pt, end_y)
+    c.restoreState()
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.7)
+    c.rect(end_x, end_y, end_w_pt, end_h_pt, fill=0, stroke=1)
+
+    # ── Dimension annotations ─────────────────────────────────────────────
+    # Front: length at bottom
+    draw_dimension_line(c, front_x, front_y, front_x + front_w_pt, front_y,
+                        f"{l_mm} mm", side="bottom", offset=5*mm)
+    # Front: face-width on left
+    draw_dimension_line(c, front_x, front_y, front_x, front_y + front_h_pt,
+                        f"{w_mm} mm", side="left", offset=6*mm)
+    # End section: width at bottom
+    draw_dimension_line(c, end_x, end_y, end_x + end_w_pt, end_y,
+                        f"{w_mm} mm", side="bottom", offset=5*mm)
+    # End section: depth on right
+    draw_dimension_line(c, end_x + end_w_pt, end_y,
+                        end_x + end_w_pt, end_y + end_h_pt,
+                        f"{d_mm} mm", side="right", offset=5*mm)
+
+    # ── View labels ───────────────────────────────────────────────────────
+    c.setFont("Helvetica", 6)
+    c.setFillColor(colors.HexColor("#666666"))
+    c.drawCentredString(front_x + front_w_pt / 2, front_y - ANN_BOT + 1*mm, "VOORAANZICHT")
+    c.drawCentredString(end_x + end_w_pt / 2,     end_y   - ANN_BOT + 1*mm, "DOORSNEDE")
+
+    # ── Note ──────────────────────────────────────────────────────────────
+    if note:
+        c.setFont("Helvetica-Oblique", 6)
+        c.setFillColor(colors.HexColor("#666666"))
+        c.drawString(bx + PAD, by + PAD / 2, note[:90])
+
+    # ── Cell border ───────────────────────────────────────────────────────
+    c.setStrokeColor(colors.HexColor("#999999"))
+    c.setLineWidth(0.4)
+    c.rect(bx, by, bw, bh)
+
+
 def page_timber_parts(c, page_num, total_pages):
-    """One page: annotated isometric drawings of all unique timber sections."""
+    """Two-view (front + cross-section) part drawings for all unique timber pieces."""
     content_y = MARGIN + TITLE_H + 4 * mm
     content_h = PAGE_H - content_y - MARGIN
 
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(colors.black)
-    c.drawString(MARGIN, content_y + content_h + 2 * mm, "TIMBER PARTS — INDIVIDUAL PART DRAWINGS")
+    c.drawString(MARGIN, content_y + content_h + 2 * mm, "ONDERDELEN — MAATTEKENINGEN")
 
+    # Collect unique structural parts from BOM (deduplicate same section+length)
     bom = get_bom()
-    timber_bom = [b for b in bom if b["material"] not in ("Steel", "Steel (hot-dip galv.)") and b["part"] != "Tabletop panel"]
+    skip_mats = {"Steel", "Steel (hot-dip galv.)"}
+    seen = {}
+    for item in bom:
+        if item["material"] in skip_mats:
+            continue
+        if "Tafelblad" in item["part"]:
+            continue
+        if item.get("width_mm") is None:
+            continue
+        key = (item["width_mm"], item.get("depth_mm", 0), item["length_mm"])
+        if key in seen:
+            seen[key]["qty"] = seen[key]["qty"] + item["qty"]
+            seen[key]["part"] += f" / {item['part'].split('—')[-1].strip()}"
+        else:
+            seen[key] = dict(item)
 
-    # Layout: 3 columns × 2 rows
-    n_cols = 3
+    parts = list(seen.values())
+
+    # Layout: 2 columns, enough rows
+    n_cols = 2
+    n_rows = math.ceil(len(parts) / n_cols)
     cell_w = DRAW_W / n_cols
-    cell_h = (content_h - 10 * mm) / 2
+    cell_h = (content_h - 6 * mm) / n_rows
 
-    iso_scale = 0.045  # mm → points at a sensible visual size, tweak if needed
-
-    for idx, item in enumerate(timber_bom[:6]):  # up to 6 parts in 3×2 grid
+    for idx, item in enumerate(parts):
         col = idx % n_cols
         row = idx // n_cols
-        cx = MARGIN + col * cell_w + cell_w / 2
-        cy = content_y + content_h - 10 * mm - row * cell_h - cell_h * 0.35
+        bx = MARGIN + col * cell_w
+        by = content_y + content_h - 6*mm - (row + 1) * cell_h
 
-        w = item.get("width_mm") or 50
-        d = item.get("depth_mm") or 75
-        l = item.get("length_mm") or 900
-
-        # Clamp visual length so it doesn't overflow
-        vis_l = min(l, 500)
-
-        _draw_iso_box(
-            c, cx, cy,
-            w=w * iso_scale,
-            d=d * iso_scale,
-            h=vis_l * iso_scale,
-            scale=1.0,
-            label=item["part"].split("—")[0].strip(),
-            dims_text=[
-                f"Section: {w} × {d} mm",
-                f"Length: {l} mm",
-                f"Qty: {item['qty']}",
-                item.get("note", ""),
-            ],
+        _draw_part_cell(
+            c, bx, by, cell_w, cell_h,
+            name=item["part"].split("—")[0].strip(),
+            w_mm=item["width_mm"],
+            d_mm=item.get("depth_mm") or item["width_mm"],
+            l_mm=item["length_mm"],
+            qty=item["qty"],
+            note=item.get("note", ""),
         )
 
-        # Cell border
-        c.setLineWidth(0.2)
-        c.setStrokeColor(colors.HexColor("#dddddd"))
-        c.rect(MARGIN + col * cell_w, content_y + content_h - 10 * mm - (row + 1) * cell_h,
-               cell_w, cell_h)
-
-    draw_title_block(c, page_num, total_pages, "Timber Parts — Individual Drawings")
+    draw_title_block(c, page_num, total_pages, "Onderdelen — Maattekeningen")
     c.showPage()
 
 
