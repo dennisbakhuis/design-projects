@@ -23,6 +23,7 @@ from cadquery.vis import (
     vtkWindowToImageFilter,
     vtkPNGWriter,
 )
+from vtkmodules.vtkRenderingCore import vtkLight
 from workbench.workbench_v2 import make_workbench
 
 OUTPUT = Path(__file__).parent / "workbench_iso_colored.png"
@@ -44,7 +45,16 @@ def render(
     renderer.SetBackground(1.0, 1.0, 1.0)   # wit
 
     for act in toVTKAssy(assy):
+        act.GetProperty().SetAmbient(0.4)   # lift dark faces
+        act.GetProperty().SetDiffuse(0.7)
         renderer.AddActor(act)
+
+    # Top light — illuminates tabletop
+    top_light = vtkLight()
+    top_light.SetPosition(0, 0, 5000)
+    top_light.SetFocalPoint(0, 0, 0)
+    top_light.SetIntensity(0.6)
+    renderer.AddLight(top_light)
 
     # Camera: frontal-right, low — shows front face, cart + wheels, tanks
     cam = renderer.GetActiveCamera()
