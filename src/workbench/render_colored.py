@@ -41,7 +41,7 @@ def render(
 
     print("Building VTK scene...")
     renderer = vtkRenderer()
-    renderer.SetBackground(0.96, 0.96, 0.96)
+    renderer.SetBackground(1.0, 1.0, 1.0)   # wit
 
     for act in toVTKAssy(assy):
         renderer.AddActor(act)
@@ -52,6 +52,7 @@ def render(
     cam.SetFocalPoint(-300, 0, 500)
     cam.SetViewUp(0, 0, 1)
     renderer.ResetCameraClippingRange()
+    cam.Zoom(2.2)
 
     win = vtkRenderWindow()
     win.SetSize(width, height)
