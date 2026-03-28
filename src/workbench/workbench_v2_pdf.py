@@ -196,7 +196,29 @@ def page_title(c, page_num, total_pages, iso_rl):
         ty -= 5.5 * mm
     iso_area_x = MARGIN + info_w + 6 * mm
     iso_area_w = DRAW_W - info_w - 6 * mm
-    place_drawing(c, iso_rl, iso_area_x, content_y, iso_area_w, content_h, "")
+
+    # Use colored PNG if available, otherwise fall back to SVG-based drawing
+    colored_png = OUTPUT_DIR / "workbench_iso_colored.png"
+    if colored_png.exists() and iso_rl is None:
+        from reportlab.lib.utils import ImageReader
+        img = ImageReader(str(colored_png))
+        iw, ih = img.getSize()
+        scale = min(iso_area_w / iw, content_h / ih)
+        dw, dh = iw * scale, ih * scale
+        ox_ = iso_area_x + (iso_area_w - dw) / 2
+        oy_ = content_y + (content_h - dh) / 2
+        c.drawImage(str(colored_png), ox_, oy_, dw, dh)
+    elif colored_png.exists():
+        from reportlab.lib.utils import ImageReader
+        img = ImageReader(str(colored_png))
+        iw, ih = img.getSize()
+        scale = min(iso_area_w / iw, content_h / ih)
+        dw, dh = iw * scale, ih * scale
+        ox_ = iso_area_x + (iso_area_w - dw) / 2
+        oy_ = content_y + (content_h - dh) / 2
+        c.drawImage(str(colored_png), ox_, oy_, dw, dh)
+    else:
+        place_drawing(c, iso_rl, iso_area_x, content_y, iso_area_w, content_h, "")
     draw_title_block(c, page_num, total_pages, "Title — Project Overview")
     c.showPage()
 
