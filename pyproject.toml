@@ -7,6 +7,7 @@ license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "cadquery>=2.7.0",
+    "pyvista>=0.47.1",
     "reportlab>=4.4.10",
     "svglib>=1.6.0",
 ]
@@ -36,6 +37,12 @@ select = [
     "SIM",
     "RUF",
 ]
+ignore = [
+    "RUF001",  # ambiguous unicode chars (× etc.) — intentional in construction drawings
+    "RUF003",  # same, in comments
+    "N806",    # uppercase variables in functions — used as local constants in CAD code
+    "E741",    # ambiguous variable names (l, O) — common in geometry/math code
+]
 
 [tool.ruff.lint.isort]
-known-first-party = ["src"]
+known-first-party = ["src", "helper_objects"]

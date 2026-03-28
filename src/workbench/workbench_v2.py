@@ -1,31 +1,48 @@
+"""
+Workbench v2 — CadQuery model.
+
+Defines the full workshop workbench geometry including L-shaped tabletop,
+legs, stretchers, aprons, slat walls, and layout props (D12 twinsets,
+HBM tool cart).
+
+Run with:
+    uv run python src/workbench/workbench_v2.py --svg
+"""
+
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import cadquery as cq
 from cadquery import Assembly, Color, Location, Vector
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from helper_objects import make_d12_twinset
-from helper_objects.d12_tanks.d12_tanks import CYLINDER_SPACING, TANK_DIAMETER
+from helper_objects.d12_twinset import CYLINDER_SPACING, TANK_DIAMETER, loc, make_d12_twinset
+from helper_objects.hbm_tool_cart import make_hbm_tool_cart
 
 # ── Design parameters ────────────────────────────────────────────────────────
 
 TABLE_LENGTH = 2700
 TABLE_WIDTH = 800
-TABLE_THICKNESS = 40
+TABLE_THICKNESS = 52  # steamed beech 52 mm (per order)
 
-LEG_WIDTH = 75  # standard 75x75 mm planed timber
-LEG_DEPTH = 75
+LEG_WIDTH = 80  # oak timber 80×80 mm (per order)
+LEG_DEPTH = 80
 LEG_HEIGHT = 970
 
-STRETCHER_WIDTH = 50  # standard 50x75 mm planed timber
+STRETCHER_WIDTH = 52  # steamed beech 52×75 mm (per order; ripped from 52×150)
 STRETCHER_HEIGHT = 75
 STRETCHER_INSET = 50
 STRETCHER_Z = 150
 
 APRON_HEIGHT = 75  # matches stretcher cross-section
 APRON_THICKNESS = STRETCHER_WIDTH  # 50 mm, same as stretcher width
+
+# ── Mortise & Tenon joint dimensions ────────────────────────────────────────
+TENON_THICKNESS = 18  # mm  (from 50mm stock; 16mm shoulder each face)
+TENON_HEIGHT = 60  # mm  (from 75mm stock; 7.5mm shoulder top & bottom)
+TENON_LENGTH = 30  # mm  (depth into leg; leg is 75mm, leaves 45mm core)
+MORTISE_DEPTH = 32  # mm  (2mm clearance at bottom vs tenon length)
 
 # D12 twinset arrangement: 3 columns x 2 rows = 6 twinsets / 12 tanks
 TWINSET_COLS = 3
@@ -35,17 +52,17 @@ TWINSET_ROWS = 2
 SLAT_WIDTH = 20  # face width of each slat (X direction), mm
 SLAT_DEPTH = 15  # depth of each slat (Y direction), mm
 SLAT_GAP = 10  # gap between slats, mm
-SLAT_BOTTOM_Z = 10  # clearance above floor, mm
-SLAT_TOP_CLEARANCE = 10  # clearance below tabletop underside, mm
-SLAT_WALL_INSET = 10     # how far inside the leg front face the slat wall sits, mm
+SLAT_BOTTOM_Z = 20  # 2 cm above floor
+SLAT_TOP_CLEARANCE = 10  # 1 cm below underside of top → slat = 970−20−10 = 940 mm
+SLAT_WALL_INSET = 10  # how far inside the leg front face the slat wall sits, mm
 
 EXT_DEPTH = 200
-EXT_LENGTH = TWINSET_COLS * (200 + 50) - 50 + STRETCHER_INSET + 30
+EXT_LENGTH = 800  # mm — widened from 780 to give 34mm clearance left of twinsets
 FILLET_RADIUS = 100
 
 # Wall beam parameters (mounts flush against the wall at back of table)
-WALL_BEAM_WIDTH = 75  # standard 75x75 mm planed timber (height, Z)
-WALL_BEAM_HEIGHT = 75  # depth into wall (Y)
+WALL_BEAM_WIDTH = 80  # oak timber 80×80 mm (per order)
+WALL_BEAM_HEIGHT = 80  # depth into wall (Y)
 WALL_BEAM_LENGTH = TABLE_LENGTH - 2 * STRETCHER_INSET  # inset on left and right sides
 
 OUTPUT_DIR = Path(__file__).parent
@@ -140,10 +157,6 @@ def make_wall_beam():
     return cq.Workplane("XY").box(WALL_BEAM_LENGTH, WALL_BEAM_HEIGHT, WALL_BEAM_WIDTH)
 
 
-def loc(x, y, z):
-    return Location(Vector(x, y, z))
-
-
 def slat_wall_positions(total_width: float) -> list[float]:
     """Return X offsets (relative to wall center) for each slat center."""
     pitch = SLAT_WIDTH + SLAT_GAP
@@ -226,17 +239,17 @@ def get_bom():
     right_rail_span = abs(wall_back_y - LEG_DEPTH / 2 - (ext_front_leg_y + LEG_DEPTH / 2))
 
     # Slat counts
-    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
+    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE  # 940 mm
     front_wall_span = (right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2)
     n_front_slats = int(front_wall_span // (SLAT_WIDTH + SLAT_GAP))
     side_wall_span = (wall_back_y - LEG_DEPTH / 2) - (ext_front_leg_y + LEG_DEPTH / 2)
     n_side_slats = int(side_wall_span // (SLAT_WIDTH + SLAT_GAP))
 
     return [
-        # Legs 75×75
+        # Legs
         {
-            "part": "Leg 75×75mm",
-            "material": "Solid timber",
+            "part": f"Leg {LEG_WIDTH}×{LEG_DEPTH}mm",
+            "material": "Oak timber",
             "qty": total_legs,
             "width_mm": LEG_WIDTH,
             "depth_mm": LEG_DEPTH,
@@ -245,83 +258,86 @@ def get_bom():
         },
         # Main left stretcher
         {
-            "part": "Stretcher 50×75mm — left side",
-            "material": "Solid timber",
+            "part": f"Stretcher {STRETCHER_WIDTH}×75mm — left side",
+            "material": "Steamed beech",
             "qty": 1,
             "width_mm": STRETCHER_WIDTH,
-            "depth_mm": 75,
+            "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(main_left_span),
             "note": "Front-left to wall, bottom rail",
         },
         # ext_left stretcher
         {
-            "part": "Stretcher 50×75mm — ext left",
-            "material": "Solid timber",
+            "part": f"Stretcher {STRETCHER_WIDTH}×75mm — ext. left",
+            "material": "Steamed beech",
             "qty": 1,
             "width_mm": STRETCHER_WIDTH,
-            "depth_mm": 75,
+            "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(ext_left_span_y - LEG_DEPTH),
-            "note": "Ext-left side, bottom rail",
+            "note": "Ext. left side, bottom rail",
         },
         # Main left apron
         {
-            "part": "Apron 50×75mm — left side",
-            "material": "Solid timber",
+            "part": f"Apron {APRON_THICKNESS}×75mm — left side",
+            "material": "Steamed beech",
             "qty": 1,
             "width_mm": APRON_THICKNESS,
-            "depth_mm": 75,
+            "depth_mm": APRON_HEIGHT,
             "length_mm": round(main_left_span),
             "note": "Front-left to wall, top rail",
         },
         # ext_left apron
         {
-            "part": "Apron 50×75mm — ext left",
-            "material": "Solid timber",
+            "part": f"Apron {APRON_THICKNESS}×75mm — ext. left",
+            "material": "Steamed beech",
             "qty": 1,
             "width_mm": APRON_THICKNESS,
-            "depth_mm": 75,
+            "depth_mm": APRON_HEIGHT,
             "length_mm": round(ext_left_span_y + LEG_DEPTH),
-            "note": "Ext-left side, top rail",
+            "note": "Ext. left side, top rail",
         },
         # Wall beam
         {
-            "part": "Wall beam 75×75mm",
-            "material": "Solid timber",
+            "part": f"Wall beam {WALL_BEAM_WIDTH}×{WALL_BEAM_HEIGHT}mm",
+            "material": "Oak timber",
             "qty": 1,
-            "width_mm": WALL_BEAM_LENGTH,
-            "depth_mm": 75,
-            "length_mm": 75,
-            "note": "Wall-mounted back beam; lag-screw to wall",
+            "width_mm": WALL_BEAM_WIDTH,
+            "depth_mm": WALL_BEAM_HEIGHT,
+            "length_mm": WALL_BEAM_LENGTH,
+            "note": "Wall-mounted rear beam; lag screws into wall",
         },
         # Twinset front mounting rails (bottom + top)
         {
-            "part": "Slat mounting rail 50×75mm — front",
-            "material": "Solid timber",
+            "part": f"Mounting rail {STRETCHER_WIDTH}×75mm — front",
+            "material": "Steamed beech",
             "qty": 2,
             "width_mm": STRETCHER_WIDTH,
-            "depth_mm": 75,
+            "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(front_rail_span),
-            "note": "Bottom + top rails for front slat wall",
+            "note": "Bottom + top rail for front slat wall",
         },
         # Right side top rail
         {
-            "part": "Rail 50×75mm — right side top",
-            "material": "Solid timber",
+            "part": f"Rail {STRETCHER_WIDTH}×75mm — right side top",
+            "material": "Steamed beech",
             "qty": 1,
             "width_mm": STRETCHER_WIDTH,
-            "depth_mm": 75,
+            "depth_mm": STRETCHER_HEIGHT,
             "length_mm": round(right_rail_span),
-            "note": "Top rail, right side of twinset enclosure",
+            "note": "Top rail, right side twinset enclosure",
         },
         # Tabletop
         {
-            "part": "Tabletop panel",
-            "material": "40mm solid timber / engineered board",
+            "part": "Tabletop (L-shape)",
+            "material": f"Steamed beech {TABLE_THICKNESS}mm (edge-glued)",
             "qty": 1,
             "width_mm": TABLE_LENGTH,
-            "depth_mm": TABLE_WIDTH + EXT_DEPTH,  # full L-shape span
+            "depth_mm": TABLE_WIDTH + EXT_DEPTH,
             "length_mm": TABLE_THICKNESS,
-            "note": "L-shaped top, 2700×1000mm — see part drawing",
+            "note": (
+                f"L-shape {TABLE_LENGTH}×{TABLE_WIDTH}mm"
+                f" + ext. {EXT_LENGTH}×{EXT_DEPTH}mm — see drawing"
+            ),
         },
         # Front slats
         {
@@ -410,17 +426,31 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
 
     # ── Stretchers ──────────────────────────────────────────────────────
     for name, lx, ly, x, y, z in main_stretchers:
-        assy.add(box(lx, ly, STRETCHER_HEIGHT), name=f"s_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+        assy.add(
+            box(lx, ly, STRETCHER_HEIGHT),
+            name=f"s_{name}",
+            loc=loc(x, y, z),
+            color=Color("burlywood"),
+        )
     for name, lx, ly, x, y, z in ext_stretchers:
-        assy.add(box(lx, ly, STRETCHER_HEIGHT), name=f"se_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+        assy.add(
+            box(lx, ly, STRETCHER_HEIGHT),
+            name=f"se_{name}",
+            loc=loc(x, y, z),
+            color=Color("burlywood"),
+        )
     if stage < 2:
         return assy
 
     # ── Aprons + wall beam ───────────────────────────────────────────────
     for name, lx, ly, x, y, z in main_aprons:
-        assy.add(box(lx, ly, APRON_HEIGHT), name=f"a_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+        assy.add(
+            box(lx, ly, APRON_HEIGHT), name=f"a_{name}", loc=loc(x, y, z), color=Color("burlywood")
+        )
     for name, lx, ly, x, y, z in ext_aprons:
-        assy.add(box(lx, ly, APRON_HEIGHT), name=f"ae_{name}", loc=loc(x, y, z), color=Color("burlywood"))
+        assy.add(
+            box(lx, ly, APRON_HEIGHT), name=f"ae_{name}", loc=loc(x, y, z), color=Color("burlywood")
+        )
     wall_beam_x = (right_x + left_x) / 2
     wall_beam_len = TABLE_LENGTH - 2 * STRETCHER_INSET
     assy.add(
@@ -448,24 +478,40 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
     front_slat_x_right = right_x - LEG_WIDTH / 2
     front_rail_span = front_slat_x_right - front_slat_x_left
     front_rail_mid_x = (front_slat_x_left + front_slat_x_right) / 2
-    assy.add(box(front_rail_span, STRETCHER_WIDTH, STRETCHER_HEIGHT), name="front_rail_bot",
-             loc=loc(front_rail_mid_x, rail_y, STRETCHER_Z), color=Color("peru"))
-    assy.add(box(front_rail_span, STRETCHER_WIDTH, APRON_HEIGHT), name="front_rail_top",
-             loc=loc(front_rail_mid_x, rail_y, APRON_Z), color=Color("peru"))
+    assy.add(
+        box(front_rail_span, STRETCHER_WIDTH, STRETCHER_HEIGHT),
+        name="front_rail_bot",
+        loc=loc(front_rail_mid_x, rail_y, STRETCHER_Z),
+        color=Color("peru"),
+    )
+    assy.add(
+        box(front_rail_span, STRETCHER_WIDTH, APRON_HEIGHT),
+        name="front_rail_top",
+        loc=loc(front_rail_mid_x, rail_y, APRON_Z),
+        color=Color("peru"),
+    )
     right_rail_x = right_x - LEG_WIDTH / 2 + STRETCHER_WIDTH / 2
     side_y_front = ext_front_leg_y + LEG_DEPTH / 2
     side_y_back = wall_back_y - LEG_DEPTH / 2
     right_rail_span = side_y_back - side_y_front
     right_rail_cy = (side_y_front + side_y_back) / 2
-    assy.add(box(STRETCHER_WIDTH, right_rail_span, APRON_HEIGHT), name="right_rail_top",
-             loc=loc(right_rail_x, right_rail_cy, APRON_Z), color=Color("peru"))
+    assy.add(
+        box(STRETCHER_WIDTH, right_rail_span, APRON_HEIGHT),
+        name="right_rail_top",
+        loc=loc(right_rail_x, right_rail_cy, APRON_Z),
+        color=Color("peru"),
+    )
     if stage < 5:
         return assy
 
     # ── Slats ─────────────────────────────────────────────────────────────
-    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
+    # Slats: 2cm above floor → 1cm below tabletop underside (screw to mounting rails)
+    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE  # 940 mm
+    slat_z_ctr = SLAT_BOTTOM_Z + slat_height / 2  # noqa: F841
+
     side_slat_x = ext_left_leg_x - LEG_WIDTH / 2 + SLAT_WALL_INSET + SLAT_DEPTH / 2
-    front_slat_wall_y = ext_front_leg_y + LEG_DEPTH / 2 - SLAT_WALL_INSET - SLAT_DEPTH / 2
+    # Position slats in FRONT of mounting rails (same formula as make_workbench)
+    front_slat_wall_y = ext_front_y + STRETCHER_INSET + SLAT_WALL_INSET + SLAT_DEPTH / 2
 
     slat_x_left = ext_left_leg_x + LEG_WIDTH / 2
     slat_x_right = right_x - LEG_WIDTH / 2
@@ -475,9 +521,12 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
     arr_span_f = n_f * pitch - SLAT_GAP
     x0 = (slat_x_left + slat_x_right) / 2 - arr_span_f / 2 + SLAT_WIDTH / 2
     for i in range(n_f):
-        assy.add(box(SLAT_WIDTH, SLAT_DEPTH, slat_height), name=f"fs_{i}",
-                 loc=loc(x0 + i * pitch, front_slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
-                 color=Color("burlywood"))
+        assy.add(
+            box(SLAT_WIDTH, SLAT_DEPTH, slat_height),
+            name=f"fs_{i}",
+            loc=loc(x0 + i * pitch, front_slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
+            color=Color("burlywood"),
+        )
 
     side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2
     side_wall_y_back = wall_back_y - LEG_DEPTH / 2
@@ -487,9 +536,12 @@ def make_workbench_stage(stage: int) -> cq.Assembly:
     arr_span_s = n_s * pitch - SLAT_GAP
     y0 = side_cy - arr_span_s / 2 + SLAT_WIDTH / 2
     for i in range(n_s):
-        assy.add(box(SLAT_DEPTH, SLAT_WIDTH, slat_height), name=f"ss_{i}",
-                 loc=loc(side_slat_x, y0 + i * pitch, SLAT_BOTTOM_Z + slat_height / 2),
-                 color=Color("burlywood"))
+        assy.add(
+            box(SLAT_DEPTH, SLAT_WIDTH, slat_height),
+            name=f"ss_{i}",
+            loc=loc(side_slat_x, y0 + i * pitch, SLAT_BOTTOM_Z + slat_height / 2),
+            color=Color("burlywood"),
+        )
 
     return assy
 
@@ -560,6 +612,19 @@ def make_workbench(include_props: bool = True):
     )
 
     if include_props:
+        # ── HBM tool cart — stored in segment A (left section under bench) ────
+        # Segment A inner X span: left_x+LEG_WIDTH/2  →  ext_left_leg_x-LEG_WIDTH/2
+        #   = -1225 mm  →  +620 mm  (1845 mm wide)
+        # Cart body 1465 mm centred at x = (-1225+620)/2 = -302.5 mm
+        # Cart pushed to back: Y centre = (wall_back_y - LEG_DEPTH/2) - 460/2
+        cart_x = (left_x + LEG_WIDTH / 2 + ext_left_leg_x - LEG_WIDTH / 2) / 2  # -302.5 mm
+        cart_y = -TABLE_WIDTH / 2 + 50 + 460 / 2  # front face 50mm inset = -120 mm
+        assy.add(
+            make_hbm_tool_cart(),
+            name="tool_cart",
+            loc=Location(Vector(cart_x, cart_y, 0)),
+        )
+
         # ── D12 twinsets: 3 columns x 2 rows = 6 twinsets / 12 tanks ─────────
         # Twinsets are rotated 90° around Z so cylinders are side-by-side in Y.
         # Anchored to the back-right corner; back row is closest to the wall.
@@ -579,12 +644,12 @@ def make_workbench(include_props: bool = True):
                 )
 
     # ── Twinset front slat wall ───────────────────────────────────────────
-    column_spacing_val = TANK_DIAMETER + 30  # must match the twinset loop value
-    row_spacing_val = CYLINDER_SPACING + TANK_DIAMETER + 30
+    column_spacing_val = TANK_DIAMETER + 30  # must match the twinset loop value  # noqa: F841
+    row_spacing_val = CYLINDER_SPACING + TANK_DIAMETER + 30  # noqa: F841
 
     # X extent: between the inner faces of the extension legs (no clipping)
-    slat_wall_x_right = right_x - LEG_WIDTH / 2          # inner face of ext_front_right leg
-    slat_wall_x_left = ext_left_leg_x + LEG_WIDTH / 2    # inner face of ext_front_left leg
+    slat_wall_x_right = right_x - LEG_WIDTH / 2  # inner face of ext_front_right leg
+    slat_wall_x_left = ext_left_leg_x + LEG_WIDTH / 2  # inner face of ext_front_left leg
     slat_wall_width = slat_wall_x_right - slat_wall_x_left
     slat_wall_center_x = (slat_wall_x_right + slat_wall_x_left) / 2
 
@@ -592,13 +657,14 @@ def make_workbench(include_props: bool = True):
     # Leg front face is at ext_front_y + STRETCHER_INSET; slat sits SLAT_WALL_INSET mm behind it
     slat_wall_y = ext_front_y + STRETCHER_INSET + SLAT_WALL_INSET + SLAT_DEPTH / 2
 
-    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE
+    slat_height = LEG_HEIGHT - SLAT_BOTTOM_Z - SLAT_TOP_CLEARANCE  # 940 mm
+    slat_z_ctr = SLAT_BOTTOM_Z + slat_height / 2
 
     for i, x_offset in enumerate(slat_wall_positions(slat_wall_width)):
         assy.add(
             box(SLAT_WIDTH, SLAT_DEPTH, slat_height),
             name=f"slat_{i}",
-            loc=loc(slat_wall_center_x + x_offset, slat_wall_y, SLAT_BOTTOM_Z + slat_height / 2),
+            loc=loc(slat_wall_center_x + x_offset, slat_wall_y, slat_z_ctr),
             color=Color("burlywood"),
         )
 
@@ -626,8 +692,8 @@ def make_workbench(include_props: bool = True):
     side_slat_x = ext_left_leg_x - LEG_WIDTH / 2 + SLAT_WALL_INSET + SLAT_DEPTH / 2
 
     # Y span: between inner faces of front and back legs
-    side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2   # inner face of front leg
-    side_wall_y_back = wall_back_y - LEG_DEPTH / 2        # inner face of back leg
+    side_wall_y_front = ext_front_leg_y + LEG_DEPTH / 2  # inner face of front leg
+    side_wall_y_back = wall_back_y - LEG_DEPTH / 2  # inner face of back leg
     side_wall_span_y = side_wall_y_back - side_wall_y_front
     side_wall_center_y = (side_wall_y_front + side_wall_y_back) / 2
 

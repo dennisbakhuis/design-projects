@@ -1,5 +1,4 @@
-import sys
-from pathlib import Path
+"""D12 diving cylinder twinset — CadQuery model."""
 
 import cadquery as cq
 from cadquery import Assembly, Color, Location, Vector
@@ -54,8 +53,6 @@ M8_ROD_PROTRUSION = TANK_RADIUS - 25
 
 CYLINDER_SPACING = 203
 CYLINDER_GAP = CYLINDER_SPACING - TANK_DIAMETER
-
-OUTPUT_DIR = Path(__file__).parent
 
 COLOR_STEEL = Color(0.86, 0.86, 0.86)
 COLOR_CHROME = Color(0.75, 0.75, 0.75)
@@ -247,41 +244,3 @@ def make_d12_twinset():
         )
 
     return assy
-
-
-# ── Viewer support (CQ-editor / CQ-designer) ────────────────────────────────
-
-result = make_d12_twinset()
-
-# ── CLI: export views when run directly ──────────────────────────────────────
-
-if __name__ == "__main__" and "--svg" in sys.argv:
-    assy = make_d12_twinset()
-    compound = assy.toCompound()
-
-    def rotated(shape, axis, angle):
-        return shape.rotate((0, 0, 0), axis, angle)
-
-    stem = Path(__file__).stem
-
-    def export_view(comp, view, width=800, height=1000):
-        cq.exporters.export(
-            comp,
-            str(OUTPUT_DIR / f"{stem}_{view}.svg"),
-            opt={
-                "projectionDir": (0, 0, 1),
-                "width": width,
-                "height": height,
-                "showAxes": False,
-                "strokeColor": (40, 40, 40),
-                "hiddenColor": (200, 200, 200),
-                "showHidden": False,
-            },
-        )
-
-    front = rotated(compound, (-1, 0, 0), 90)
-    export_view(front, "front")
-
-    threed = rotated(compound, (-1, 0, 0), 75)
-    threed = rotated(threed, (0, 1, 0), -30)
-    export_view(threed, "3d", width=1000)

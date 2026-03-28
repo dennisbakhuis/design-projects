@@ -1,31 +1,81 @@
 """
 Construction drawing PDF for workbench_v2.
 
-Run with:
-    uv run python src/workbench/workbench_v2_pdf.py
+Also handles optional colored ISO rendering (VTK) and joinery diagram
+generation (matplotlib) before assembling the PDF.
 
-Outputs: src/workbench/workbench_v2_construction.pdf
+Run with:
+    uv run python src/workbench/workbench_v2_pdf.py [--force-render]
+
+Outputs:
+    src/workbench/workbench_v2_construction.pdf
+    src/workbench/workbench_iso_colored.png   (if VTK available)
+    src/workbench/joinery_stretcher_to_leg.png (if matplotlib available)
 """
 
+import argparse
 import math
+import re
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import cadquery as cq
+from reportlab.graphics import renderPDF
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A3, landscape
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from svglib.svglib import svg2rlg
-from reportlab.graphics import renderPDF
+
+# ── Optional: VTK for colored ISO render ─────────────────────────────────────
+try:
+    import vtkmodules.vtkRenderingCore  # noqa: F401 — presence check only
+
+    _VTK_AVAILABLE = True
+except Exception:
+    _VTK_AVAILABLE = False
+
+# ── Optional: matplotlib for joinery diagram ─────────────────────────────────
+try:
+    import matplotlib.pyplot as plt  # noqa: F401 — presence check only
+
+    _MPL_AVAILABLE = True
+except Exception:
+    _MPL_AVAILABLE = False
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from workbench.workbench_v2 import (
-    make_workbench, make_workbench_stage, get_bom, make_tabletop,
-    TABLE_LENGTH, TABLE_WIDTH, LEG_HEIGHT, TABLE_THICKNESS,
-    LEG_WIDTH, LEG_DEPTH, STRETCHER_WIDTH, APRON_THICKNESS, APRON_HEIGHT,
-    STRETCHER_HEIGHT, EXT_DEPTH, EXT_LENGTH, SLAT_WIDTH, SLAT_DEPTH,
+    APRON_HEIGHT,
+    APRON_THICKNESS,
+    EXT_DEPTH,
+    EXT_LENGTH,
+    FILLET_RADIUS,
+    LEG_DEPTH,
+    LEG_HEIGHT,
+    LEG_WIDTH,
+    MORTISE_DEPTH,
+    SLAT_DEPTH,
+    SLAT_WIDTH,
+    STRETCHER_HEIGHT,
+    STRETCHER_WIDTH,
+    STRETCHER_Z,
+    TABLE_LENGTH,
+    TABLE_THICKNESS,
+    TABLE_WIDTH,
+    TENON_HEIGHT,
+    TENON_LENGTH,
+    TENON_THICKNESS,
+    ext_front_y,
+    ext_left_leg_x,
+    get_bom,
+    left_x,
+    leg_inset_y,
+    make_tabletop,
+    make_workbench,
+    make_workbench_stage,
+    right_x,
 )
 
 OUTPUT_DIR = Path(__file__).parent
@@ -38,6 +88,7 @@ DRAW_W = PAGE_W - MARGIN * 2
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def rotated(shape, axis, angle):
     return shape.rotate((0, 0, 0), axis, angle)
 
@@ -48,7 +99,7 @@ def iso_compound(compound):
 
 
 def export_temp_svg(compound, view_name, width=2400, height=1600, show_hidden=True):
-    tmp = tempfile.NamedTemporaryFile(suffix=f"_{view_name}.svg", delete=False)
+    tmp = tempfile.NamedTemporaryFile(suffix=f"_{view_name}.svg", delete=False)  # noqa: SIM115
     cq.exporters.export(
         compound,
         tmp.name,
@@ -76,8 +127,49 @@ def svg_to_rl(svg_path, target_w, target_h):
     return drawing
 
 
+def parse_svg_transform(svg_path):
+    """Return (sx, sy, tx, ty, svg_w, svg_h) from the first group transform in a CadQuery SVG."""
+    try:
+        tree = ET.parse(str(svg_path))
+        root = tree.getroot()
+        svg_w = float(root.get("width", 1800))
+        svg_h = float(root.get("height", 1000))
+        for elem in root.iter():
+            t = elem.get("transform", "")
+            if t:
+                nums = re.findall(r"[-+]?\d+(?:\.\d+)?", t)
+                if len(nums) >= 4:
+                    sx, sy, tx, ty = (float(n) for n in nums[:4])
+                    return sx, sy, tx, ty, svg_w, svg_h
+    except Exception:
+        pass
+    return 1.0, -1.0, 0.0, 0.0, 1800.0, 1000.0
+
+
+def make_coord_converter(svg_path, rl_drawing, canvas_ox, canvas_oy):
+    """Return a callable (model_h, model_v) -> (canvas_x, canvas_y).
+
+    model_h: horizontal model coordinate (mm) for this view
+    model_v: vertical  model coordinate (mm) for this view (height = Z)
+    """
+    sx, sy, tx, ty, svg_w, svg_h = parse_svg_transform(svg_path)
+    rl_scale = rl_drawing.width / svg_w  # mm per SVG pixel (isotropic)
+
+    def convert(model_h: float, model_v: float):
+        # Apply SVG group transform (scale + translate, applied R→L)
+        svg_x = sx * (model_h + tx)
+        svg_y = sy * (model_v + ty)  # sy is negative → y-flip built-in
+        # RL has Y=0 at drawing bottom; SVG has Y=0 at top → flip
+        rl_x = svg_x * rl_scale
+        rl_y = (svg_h - svg_y) * rl_scale
+        return canvas_ox + rl_x, canvas_oy + rl_y
+
+    return convert
+
+
 def place_drawing(c, rl_drawing, area_x, area_y, area_w, area_h, label=""):
     if rl_drawing is None:
+        ox, oy, dw, dh = area_x, area_y, area_w, area_h
         c.setFont("Helvetica", 9)
         c.drawCentredString(area_x + area_w / 2, area_y + area_h / 2, "[view unavailable]")
     else:
@@ -95,9 +187,10 @@ def place_drawing(c, rl_drawing, area_x, area_y, area_w, area_h, label=""):
         c.setFont("Helvetica-Bold", 8)
         c.setFillColor(colors.black)
         c.drawCentredString(area_x + area_w / 2, area_y + 3 * mm, label)
+    return ox, oy, dw, dh
 
 
-def draw_dimension_line(c, x1, y1, x2, y2, text, side="bottom", offset=8*mm, tick=3*mm):
+def draw_dimension_line(c, x1, y1, x2, y2, text, side="bottom", offset=8 * mm, tick=3 * mm):
     """Draw a dimension line with tick marks and centred label.
     side: 'bottom'/'top' for horizontal dims, 'left'/'right' for vertical dims.
     """
@@ -160,6 +253,7 @@ def draw_title_block(c, page_num, total_pages, title):
 
 # ── Page builders ─────────────────────────────────────────────────────────────
 
+
 def page_title(c, page_num, total_pages, iso_rl):
     content_y = MARGIN + TITLE_H + 4 * mm
     content_h = PAGE_H - content_y - MARGIN
@@ -180,9 +274,9 @@ def page_title(c, page_num, total_pages, iso_rl):
         ("Overall depth", f"{TABLE_WIDTH + 200} mm (incl. extension)"),
         ("Height", f"{LEG_HEIGHT + TABLE_THICKNESS} mm"),
         ("Primary material", "Solid timber, European standard sizes"),
-        ("Leg section", "75 × 75 mm"),
-        ("Stretchers / Aprons", "50 × 75 mm"),
-        ("Wall beam", "75 × 75 mm (wall-anchored)"),
+        ("Leg section", f"{LEG_WIDTH} × {LEG_DEPTH} mm oak timber"),
+        ("Stretchers / Aprons", f"{STRETCHER_WIDTH} × {STRETCHER_HEIGHT} mm steamed beech"),
+        ("Wall beam", f"{LEG_WIDTH} × {LEG_DEPTH} mm oak (wall-anchored)"),
         ("Slat panels", "20 × 15 mm, 10 mm gaps"),
         ("Twinset storage", "6× D12 twinsets (3 cols × 2 rows)"),
         ("Sheets included", f"{total_pages} (title, BOM, elevations, plan, manual, details)"),
@@ -195,7 +289,21 @@ def page_title(c, page_num, total_pages, iso_rl):
         ty -= 5.5 * mm
     iso_area_x = MARGIN + info_w + 6 * mm
     iso_area_w = DRAW_W - info_w - 6 * mm
-    place_drawing(c, iso_rl, iso_area_x, content_y, iso_area_w, content_h, "")
+
+    # Use colored PNG if available, otherwise fall back to SVG-based drawing
+    colored_png = OUTPUT_DIR / "workbench_iso_colored.png"
+    if (colored_png.exists() and iso_rl is None) or colored_png.exists():
+        from reportlab.lib.utils import ImageReader
+
+        img = ImageReader(str(colored_png))
+        iw, ih = img.getSize()
+        scale = min(iso_area_w / iw, content_h / ih)
+        dw, dh = iw * scale, ih * scale
+        ox_ = iso_area_x + (iso_area_w - dw) / 2
+        oy_ = content_y + (content_h - dh) / 2
+        c.drawImage(str(colored_png), ox_, oy_, dw, dh)
+    else:
+        place_drawing(c, iso_rl, iso_area_x, content_y, iso_area_w, content_h, "")
     draw_title_block(c, page_num, total_pages, "Title — Project Overview")
     c.showPage()
 
@@ -226,7 +334,7 @@ def page_bom(c, page_num, total_pages):
     c.rect(MARGIN, header_y - row_h + 1.5 * mm, DRAW_W, row_h, fill=1, stroke=0)
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 8)
-    for label, x, w in cols:
+    for label, x, _w in cols:
         c.drawString(x, header_y - row_h + 3.5 * mm, label)
 
     ty = header_y - row_h
@@ -238,7 +346,7 @@ def page_bom(c, page_num, total_pages):
         c.setFont("Helvetica-Bold" if item.get("material") == "Steel" else "Helvetica", 8)
 
         def cell(text, x):
-            c.drawString(x, ty - row_h + 3 * mm, str(text) if text is not None else "—")
+            c.drawString(x, ty - row_h + 3 * mm, str(text) if text is not None else "—")  # noqa: B023
 
         cell(item["part"], cols[0][1])
         c.setFont("Helvetica", 8)
@@ -252,33 +360,207 @@ def page_bom(c, page_num, total_pages):
 
     c.setStrokeColor(colors.HexColor("#cccccc"))
     c.setLineWidth(0.3)
-    for label, x, w in cols:
-        c.line(x - 1 * mm, header_y - row_h * (len(bom) + 1) + 1.5 * mm, x - 1 * mm, header_y + 1.5 * mm)
+    for _label, x, _w in cols:
+        c.line(
+            x - 1 * mm,
+            header_y - row_h * (len(bom) + 1) + 1.5 * mm,
+            x - 1 * mm,
+            header_y + 1.5 * mm,
+        )
 
     draw_title_block(c, page_num, total_pages, "Bill of Materials")
     c.showPage()
 
 
-def page_elevations(c, page_num, total_pages, front_rl, side_rl):
+def page_elevations(c, page_num, total_pages, front_rl, side_rl, front_svg, side_svg):
     content_y = MARGIN + TITLE_H + 4 * mm
     content_h = PAGE_H - content_y - MARGIN
     half_w = DRAW_W / 2 - 2 * mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(MARGIN, content_y + content_h + 2 * mm, "ELEVATIONS")
-    place_drawing(c, front_rl, MARGIN, content_y + 10 * mm, half_w, content_h - 10 * mm, "FRONT ELEVATION")
-    place_drawing(c, side_rl, MARGIN + half_w + 4 * mm, content_y + 10 * mm, half_w, content_h - 10 * mm, "RIGHT SIDE ELEVATION")
+
+    area_h = content_h - 10 * mm
+    fx, fy, _fw, _fh = place_drawing(
+        c, front_rl, MARGIN, content_y + 10 * mm, half_w, area_h, "FRONT ELEVATION"
+    )
+    sx, sy, _sw, _sh = place_drawing(
+        c,
+        side_rl,
+        MARGIN + half_w + 4 * mm,
+        content_y + 10 * mm,
+        half_w,
+        area_h,
+        "RIGHT SIDE ELEVATION",
+    )
+
+    total_h = LEG_HEIGHT + TABLE_THICKNESS
+    half_L = TABLE_LENGTH / 2
+
+    # ── Front elevation: model horiz=X, model vert=Z ─────────────────────
+    fc = make_coord_converter(front_svg, front_rl, fx, fy)
+    fl_x, f0_y = fc(-half_L, 0)
+    fr_x, _ = fc(+half_L, 0)
+    _, ftop_y = fc(0, total_h)
+    _, fleg_y = fc(0, LEG_HEIGHT)
+    _, fstr_bot_y = fc(0, STRETCHER_Z - STRETCHER_HEIGHT / 2)  # bottom of stretcher
+
+    # Overall width at TOP of tabletop
+    ftop_l_x, ftop_top_y = fc(-half_L, total_h)
+    ftop_r_x, _ = fc(+half_L, total_h)
+    draw_dimension_line(
+        c,
+        ftop_l_x,
+        ftop_top_y,
+        ftop_r_x,
+        ftop_top_y,
+        f"{TABLE_LENGTH} mm",
+        side="top",
+        offset=7 * mm,
+    )
+    # Heights on right side (outside)
+    draw_dimension_line(c, fr_x, f0_y, fr_x, ftop_y, f"{total_h} mm", side="right", offset=9 * mm)
+    draw_dimension_line(
+        c, fr_x, f0_y, fr_x, fleg_y, f"{LEG_HEIGHT} mm", side="right", offset=20 * mm
+    )
+    # Stretcher: floor → bottom of stretcher (left, outside)
+    draw_dimension_line(
+        c,
+        fl_x,
+        f0_y,
+        fl_x,
+        fstr_bot_y,
+        f"{round(STRETCHER_Z - STRETCHER_HEIGHT / 2)} mm",
+        side="left",
+        offset=9 * mm,
+    )
+
+    # ── Segment A and B at floor level ───────────────────────────────────
+    seg_a_x1, _ = fc(left_x + LEG_WIDTH / 2, 0)
+    seg_a_x2, _ = fc(ext_left_leg_x - LEG_WIDTH / 2, 0)
+    seg_a = round((ext_left_leg_x - LEG_WIDTH / 2) - (left_x + LEG_WIDTH / 2))
+    draw_dimension_line(
+        c,
+        seg_a_x1,
+        f0_y,
+        seg_a_x2,
+        f0_y,
+        f"{seg_a} mm  (seg A — cart)",
+        side="bottom",
+        offset=18 * mm,
+    )
+    seg_b_x1, _ = fc(ext_left_leg_x + LEG_WIDTH / 2, 0)
+    seg_b_x2, _ = fc(right_x - LEG_WIDTH / 2, 0)
+    seg_b = round((right_x - LEG_WIDTH / 2) - (ext_left_leg_x + LEG_WIDTH / 2))
+    draw_dimension_line(
+        c,
+        seg_b_x1,
+        f0_y,
+        seg_b_x2,
+        f0_y,
+        f"{seg_b} mm  (seg B — tanks)",
+        side="bottom",
+        offset=18 * mm,
+    )
+
+    # ── Side elevation: model horiz=Y (depth), model vert=Z ──────────────
+    # Side view shows right side of workbench = segment B area
+    # model Y: ext_front_leg back face → wall_back front face
+    ext_front_leg_y = ext_front_y + leg_inset_y
+    wall_back_y_val = TABLE_WIDTH / 2 - LEG_DEPTH / 2
+
+    sc = make_coord_converter(side_svg, side_rl, sx, sy)
+
+    # Front & back leg inner faces for clear-span annotation
+    sf_inner_x, s0_y = sc(ext_front_leg_y + LEG_DEPTH / 2, 0)
+    sb_inner_x, _ = sc(wall_back_y_val - LEG_DEPTH / 2, 0)
+    _, stop_y = sc(0, total_h)
+
+    seg_b_depth = round((wall_back_y_val - LEG_DEPTH / 2) - (ext_front_leg_y + LEG_DEPTH / 2))
+    draw_dimension_line(
+        c,
+        sf_inner_x,
+        s0_y,
+        sb_inner_x,
+        s0_y,
+        f"{seg_b_depth} mm  (seg B — depth)",
+        side="bottom",
+        offset=7 * mm,
+    )
+    # Total depth at top of side view (outside faces of front & back legs)
+    sf_outer_x, stop_top_y = sc(ext_front_y, total_h)
+    sb_outer_x, _ = sc(TABLE_WIDTH / 2, total_h)
+    total_depth = TABLE_WIDTH + EXT_DEPTH
+    draw_dimension_line(
+        c,
+        sf_outer_x,
+        stop_top_y,
+        sb_outer_x,
+        stop_top_y,
+        f"{total_depth} mm",
+        side="top",
+        offset=7 * mm,
+    )
+    # Overall height on right side (outside — away from page centre)
+    draw_dimension_line(
+        c, sb_inner_x, s0_y, sb_inner_x, stop_y, f"{total_h} mm", side="right", offset=9 * mm
+    )
+
     draw_title_block(c, page_num, total_pages, "Elevations — Front & Right Side")
     c.showPage()
 
 
-def page_plan_iso(c, page_num, total_pages, top_rl, iso_rl):
+def page_plan_iso(c, page_num, total_pages, top_rl, iso_rl, top_svg):
     content_y = MARGIN + TITLE_H + 4 * mm
     content_h = PAGE_H - content_y - MARGIN
     half_w = DRAW_W / 2 - 2 * mm
     c.setFont("Helvetica-Bold", 11)
     c.drawString(MARGIN, content_y + content_h + 2 * mm, "PLAN & 3D VIEW")
-    place_drawing(c, top_rl, MARGIN, content_y + 10 * mm, half_w, content_h - 10 * mm, "TOP PLAN")
-    place_drawing(c, iso_rl, MARGIN + half_w + 4 * mm, content_y + 10 * mm, half_w, content_h - 10 * mm, "ISOMETRIC VIEW")
+
+    area_h = content_h - 10 * mm
+    px, py, _pw, _ph = place_drawing(
+        c, top_rl, MARGIN, content_y + 10 * mm, half_w, area_h, "TOP PLAN"
+    )
+    place_drawing(
+        c, iso_rl, MARGIN + half_w + 4 * mm, content_y + 10 * mm, half_w, area_h, "ISOMETRIC VIEW"
+    )
+
+    half_L = TABLE_LENGTH / 2
+    half_W = TABLE_WIDTH / 2
+
+    # ── Top plan: model horiz=X, model vert=Y (depth) ────────────────────
+    tc = make_coord_converter(top_svg, top_rl, px, py)
+    tl_x, tf_y = tc(-half_L, -half_W)  # left-front corner
+    tr_x, _ = tc(+half_L, -half_W)  # right-front
+    _, tb_y = tc(0, +half_W)  # back edge
+
+    # Overall length (front edge, bottom)
+    draw_dimension_line(
+        c, tl_x, tf_y, tr_x, tf_y, f"{TABLE_LENGTH} mm", side="bottom", offset=7 * mm
+    )
+    # Main body depth (left side)
+    draw_dimension_line(c, tl_x, tf_y, tl_x, tb_y, f"{TABLE_WIDTH} mm", side="left", offset=9 * mm)
+    # Extension: right portion width (bottom, second row)
+    ext_rx, _ = tc(+half_L, -half_W)
+    ext_lx, _ = tc(+half_L - EXT_LENGTH, -half_W)
+    draw_dimension_line(
+        c, ext_lx, tf_y, ext_rx, tf_y, f"{EXT_LENGTH} mm", side="bottom", offset=18 * mm
+    )
+    # Extension depth (right side): from main-body front edge → extension front edge
+    # Main body front: model_y = -half_W = -400mm
+    # Extension front: model_y = -(half_W + EXT_DEPTH) = -600mm
+    ext_rx2, main_front_y = tc(+half_L, -half_W)
+    _, ext_front_y_c = tc(+half_L, -(half_W + EXT_DEPTH))
+    draw_dimension_line(
+        c,
+        ext_rx2,
+        main_front_y,
+        ext_rx2,
+        ext_front_y_c,
+        f"{EXT_DEPTH} mm",
+        side="right",
+        offset=9 * mm,
+    )
+
     draw_title_block(c, page_num, total_pages, "Plan & Isometric")
     c.showPage()
 
@@ -289,39 +571,49 @@ IKEA_STEPS = [
         "title": "Step 1 — Install All Legs",
         "icon": "1",
         "bullets": [
-            "Cut all legs to 960 mm from 75×75 mm timber.",
+            f"Cut all legs to {LEG_HEIGHT} mm from {LEG_WIDTH}×{LEG_DEPTH} mm oak timber.",
             "Mark leg positions on the floor using the plan drawing.",
             "Three wall legs will be bolted directly to the wall — set aside.",
             "Stand all floor legs upright. Check plumb with a spirit level.",
         ],
-        "parts": ["Leg 75×75 mm  ×  8 total"],
+        "parts": [f"Leg {LEG_WIDTH}×{LEG_DEPTH} mm  ×  6 total"],
     },
     {
         "stage": 1,
         "title": "Step 2 — Fit Bottom Stretchers",
         "icon": "2",
         "bullets": [
-            "Cut stretchers from 50×75 mm timber (see BOM for lengths).",
+            f"Cut stretchers from {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm "
+            "steamed beech (see BOM for lengths).",
+            "Cut mortises in legs: 18×60 mm, 32 mm deep, centred on face.",
+            "Cut tenons on stretcher ends: 18×60×30 mm, 16 mm shoulders.",
+            "Dry fit all joints before gluing.",
             "Position stretchers at 150 mm from floor (centre).",
             "Clamp in place and drill pocket-screw holes (Kreg jig or similar).",
             "Drive 2× 50 mm pocket screws per joint end. Do not overtighten.",
         ],
-        "parts": ["Stretcher 50×75 mm  ×  2", "Pocket screw 50 mm  ×  8"],
+        "parts": [
+            f"Stretcher {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm  ×  2",
+            "Pocket screw 50 mm  ×  8",
+        ],
     },
     {
         "stage": 2,
         "title": "Step 3 — Fit Top Aprons & Wall Beam",
         "icon": "3",
         "bullets": [
-            "Cut aprons from 50×75 mm timber — same lengths as stretchers.",
-            "Fix aprons at 885 mm from floor (centre), flush with leg inner faces.",
-            "Mount wall beam (75×75 mm) to wall at apron height using M10×120 mm lag screws.",
+            f"Cut aprons from {APRON_THICKNESS}×{APRON_HEIGHT} mm "
+            "steamed beech — same lengths as stretchers.",
+            f"Fix aprons at {round(LEG_HEIGHT - APRON_HEIGHT / 2)} mm from floor (centre), "
+            "flush with leg inner faces.",
+            f"Mount wall beam ({LEG_WIDTH}×{LEG_DEPTH} mm oak) to wall "
+            "at apron height using M10×120 mm lag screws.",
             "Space lag screws at 600 mm centres — use rawlplugs in masonry.",
             "Bolt back apron to face of wall beam.",
         ],
         "parts": [
-            "Apron 50×75 mm  ×  2",
-            "Wall beam 75×75 mm  ×  1",
+            f"Apron {APRON_THICKNESS}×{APRON_HEIGHT} mm  ×  2",
+            f"Wall beam {LEG_WIDTH}×{LEG_DEPTH} mm  ×  1",
             "M10×120 lag screw  ×  6",
         ],
     },
@@ -330,25 +622,30 @@ IKEA_STEPS = [
         "title": "Step 4 — Lay the Tabletop",
         "icon": "4",
         "bullets": [
-            "Cut tabletop to 2700 × 800 mm from 40 mm solid or engineered board.",
+            f"Cut tabletop to {TABLE_LENGTH} × {TABLE_WIDTH} mm "
+            f"from {TABLE_THICKNESS} mm steamed beech (edge-glued).",
             "Lower onto frame. Check overhang is equal on all sides.",
             "Fix from below through apron top edge using pocket screws or figure-8 clips.",
             "Allow for wood movement — do not fully glue to frame.",
         ],
-        "parts": ["Tabletop 2700×800×40 mm  ×  1", "Pocket screw 50 mm  ×  16"],
+        "parts": [
+            f"Tabletop {TABLE_LENGTH}×{TABLE_WIDTH}×{TABLE_THICKNESS} mm  ×  1",
+            "Pocket screw 50 mm  ×  16",
+        ],
     },
     {
         "stage": 4,
         "title": "Step 5 — Fit Slat Mounting Rails",
         "icon": "5",
         "bullets": [
-            "Cut front rails and right-side rail from 50×75 mm timber (see BOM).",
+            f"Cut front rails and right-side rail from {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm "
+            "steamed beech (see BOM).",
             "Position rails flush with leg inner faces — check alignment carefully.",
-            "Slat wall sits 15 mm inside the leg outer face — rails go directly behind.",
+            "Slat wall sits 10 mm inside the leg outer face — rails go directly behind.",
             "Fix rails with 2× pocket screws per leg joint.",
         ],
         "parts": [
-            "Slat mounting rail 50×75 mm  ×  3 (front ×2, right side ×1)",
+            f"Mounting rail {STRETCHER_WIDTH}×{STRETCHER_HEIGHT} mm  ×  3 (front ×2, right ×1)",
             "Pocket screw 50 mm  ×  12",
         ],
     },
@@ -357,7 +654,8 @@ IKEA_STEPS = [
         "title": "Step 6 — Hang Slat Panels",
         "icon": "6",
         "bullets": [
-            "Cut slats to height from 20×15 mm timber. Float 10 mm above floor.",
+            "Cut slats to 940 mm from 20×15 mm timber. Start 20 mm above floor, "
+            "stop 10 mm below tabletop underside. Screw to mounting rails.",
             "Space slats 10 mm apart — use a scrap spacer block for consistency.",
             "Drive 2× 3.5×35 mm screws per slat end (top and bottom rail).",
             "Front panel: slats run vertically across X, spaced along X.",
@@ -385,7 +683,9 @@ def page_ikea_step(c, page_num, total_pages, step, stage_rl):
 
     c.setLineWidth(1.5)
     c.setStrokeColor(colors.HexColor("#333333"))
-    c.line(MARGIN, content_y + content_h - 14 * mm, MARGIN + DRAW_W, content_y + content_h - 14 * mm)
+    c.line(
+        MARGIN, content_y + content_h - 14 * mm, MARGIN + DRAW_W, content_y + content_h - 14 * mm
+    )
 
     render_w = DRAW_W * 0.62
     render_h = content_h - 18 * mm
@@ -452,10 +752,13 @@ def page_details(c, page_num, total_pages):
         ("Leg height", f"{LEG_HEIGHT} mm"),
         ("Tabletop thickness", f"{TABLE_THICKNESS} mm"),
         ("Overall height", f"{LEG_HEIGHT + TABLE_THICKNESS} mm"),
-        ("Legs", "75 × 75 mm solid timber"),
-        ("Stretchers", "50 × 75 mm (at 150 mm from floor)"),
-        ("Aprons", "50 × 75 mm (at 885 mm from floor)"),
-        ("Wall beam", "75 × 75 mm, wall-anchored"),
+        ("Legs", f"{LEG_WIDTH} × {LEG_DEPTH} mm oak timber"),
+        ("Stretchers", f"{STRETCHER_WIDTH} × 75 mm (at {STRETCHER_Z} mm from floor)"),
+        (
+            "Aprons",
+            f"{APRON_THICKNESS} × 75 mm (at {round(LEG_HEIGHT - APRON_HEIGHT / 2)} mm from floor)",
+        ),
+        ("Wall beam", f"{LEG_WIDTH} × {LEG_DEPTH} mm, wall-anchored"),
         ("Slats", "20 × 15 mm, 10 mm gaps"),
     ]
 
@@ -478,25 +781,38 @@ def page_details(c, page_num, total_pages):
     ty2 = content_y + content_h - 6 * mm
 
     join_details = [
-        ("1. LEG TO APRON & STRETCHER", [
-            "2× pocket screws (50 mm) per joint.",
-            "Apron flush with leg inner face.",
-            "Pre-drill and countersink to avoid splitting.",
-        ]),
-        ("2. WALL BEAM TO WALL", [
-            "75×75 mm beam at apron height (885 mm).",
-            "M10×120 mm lag screws at 600 mm spacing.",
-            "Use rawlplugs / expansion anchors for masonry.",
-        ]),
-        ("3. SLAT WALL MOUNTING", [
-            "Two horizontal rails per slat wall (bottom + top).",
-            "Slats fixed with 2× 3.5×35 mm screws per rail.",
-            "10 mm gap between slats; 10 mm float above floor.",
-        ]),
-        ("4. TABLETOP", [
-            "Screwed from below through apron top edge.",
-            "Figure-8 clips or pocket screws for wood movement.",
-        ]),
+        (
+            "1. LEG TO APRON & STRETCHER",
+            [
+                "2× pocket screws (50 mm) per joint.",
+                "Apron flush with leg inner face.",
+                "Pre-drill and countersink to avoid splitting.",
+            ],
+        ),
+        (
+            "2. WALL BEAM TO WALL",
+            [
+                f"{LEG_WIDTH}×{LEG_DEPTH} mm oak wall beam at apron height "
+                f"({round(LEG_HEIGHT - APRON_HEIGHT / 2)} mm).",
+                "M10×120 mm lag screws at 600 mm spacing.",
+                "Use rawlplugs / expansion anchors for masonry.",
+            ],
+        ),
+        (
+            "3. SLAT WALL MOUNTING",
+            [
+                "Two horizontal rails per slat wall (bottom + top).",
+                "Slats fixed with 2× 3.5×35 mm screws per rail.",
+                "10 mm gap between slats; 10 mm float above floor.",
+            ],
+        ),
+        (
+            "4. TABLETOP",
+            [
+                "Screwed from below through apron top edge.",
+                "Figure-8 clips or pocket screws for wood movement.",
+            ],
+        ),
     ]
 
     c.setFont("Helvetica-Bold", 9)
@@ -533,8 +849,15 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     c.drawString(MARGIN, content_y + content_h + 2 * mm, "PART DRAWING — TABLETOP (L-SHAPED)")
 
     # ── Right panel: isometric render ─────────────────────────────────────
-    place_drawing(c, iso_rl, MARGIN + half_w + 4 * mm, content_y + 10 * mm,
-                  half_w, content_h - 10 * mm, "ISOMETRIC VIEW")
+    place_drawing(
+        c,
+        iso_rl,
+        MARGIN + half_w + 4 * mm,
+        content_y + 10 * mm,
+        half_w,
+        content_h - 10 * mm,
+        "ISOMETRIC VIEW",
+    )
 
     # ── Left panel: 2D top-view schematic drawn with reportlab ────────────
     # Drawing area
@@ -544,9 +867,9 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     da_h = content_h - 20 * mm
 
     # Scale to fit: real dims 2700 × 1000mm
-    real_L = TABLE_LENGTH        # 2700
+    real_L = TABLE_LENGTH  # 2700
     real_W = TABLE_WIDTH + EXT_DEPTH  # 1000
-    sx = (da_w - 40 * mm) / real_L   # leave margin for dim lines
+    sx = (da_w - 40 * mm) / real_L  # leave margin for dim lines
     sy = (da_h - 40 * mm) / real_W
     scale = min(sx, sy)
 
@@ -562,77 +885,135 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
     ext_d = EXT_DEPTH * scale
     fillet_r = 100 * scale
 
-    # The L-shape (top-view, Y=up on page):
-    # Corners (going clockwise from top-left):
-    # A = ox, oy+draw_h          (top-left)
-    # B = ox+draw_w, oy+draw_h   (top-right)
-    # C = ox+draw_w, oy+ext_d    (bottom-right)
-    # D = ox+draw_w-ext_l, oy+ext_d  (step inner-right)
-    # E = ox+draw_w-ext_l, oy     (step inner-left, inside corner — has fillet)
-    # F = ox, oy                  (bottom-left)
-    # Note: in paper coords Y increases upward, so 'top' = back of table (wall side)
+    # ── L-shape vertices ──────────────────────────────────────────────────
+    # Correct 6-point L boundary: main body (800mm) TOP, extension BOTTOM-RIGHT.
+    #
+    #  A ────────────────────────── B
+    #  |   MAIN BODY (800mm)       |
+    #  |   2700mm wide             |
+    #  G ──────────── D ~~~~~~~~~~~|  ← 800mm from top; fillet at D
+    #                 |  EXTENSION |
+    #                 E ───────────C_ext
+    #
+    #   A = top-left        (ox,              oy+draw_h)
+    #   B = top-right       (ox+draw_w,       oy+draw_h)
+    #   C_ext = ext b-right (ox+draw_w,       oy)            ← right edge goes full depth
+    #   E = ext b-left/step (ox+draw_w-ext_l, oy)            ← sharp corner
+    #   D = inside corner   (ox+draw_w-ext_l, oy+ext_d)      ← FILLET HERE
+    #   G = main body b-l   (ox,              oy+ext_d)
 
-    A = (ox,          oy + draw_h)
+    A = (ox, oy + draw_h)
     B = (ox + draw_w, oy + draw_h)
-    C = (ox + draw_w, oy + ext_d)
-    D = (ox + draw_w - ext_l, oy + ext_d)
-    # E is inside corner with fillet
-    E_corner = (ox + draw_w - ext_l, oy)
-    F = (ox, oy)
+    C_ext = (ox + draw_w, oy)  # ext bottom-right
+    E_ = (ox + draw_w - ext_l, oy)  # ext bottom-left (sharp corner)
+    D = (ox + draw_w - ext_l, oy + ext_d)  # inside corner → fillet
+    G = (ox, oy + ext_d)  # main body bottom-left
+
+    # Fillet at D: path arrives going UP (E→D), departs going LEFT (D→G).
+    # Arc centre inside shape = (D[0]-fillet_r, D[1]-fillet_r)
+    # Start tangent (East, on E→D going UP): (D[0],          D[1]-fillet_r)  → 0°
+    # End   tangent (North, on D→G going LEFT): (D[0]-fillet_r, D[1])        → 90°
+    # Sweep: CCW from 0° (East) +90° → 90° (North)
+    arc_cx = D[0] - fillet_r
+    arc_cy = D[1] - fillet_r  # = oy + ext_d - fillet_r
 
     c.setStrokeColor(colors.HexColor("#222222"))
     c.setFillColor(colors.HexColor("#f0e8d8"))
     c.setLineWidth(1.2)
 
-    # Draw filled L-shape path
     p = c.beginPath()
     p.moveTo(*A)
     p.lineTo(*B)
-    p.lineTo(*C)
-    p.lineTo(*D)
-    # fillet at inside corner E: draw arc
-    # Arc centre: (D[0] - fillet_r, E_corner[1] + fillet_r)
-    arc_cx = D[0] - fillet_r
-    arc_cy = E_corner[1] + fillet_r
-    p.arcTo(arc_cx - fillet_r, arc_cy - fillet_r,
-            arc_cx + fillet_r, arc_cy + fillet_r,
-            180, -90)  # from 270° to 180° = inside corner arc
-    p.lineTo(*F)
-    p.lineTo(*A)
+    p.lineTo(*C_ext)  # right edge: full depth to bottom
+    p.lineTo(*E_)  # extension bottom: left to step
+    p.lineTo(D[0], D[1] - fillet_r)  # step: up to arc start (East tangent)
+    p.arcTo(
+        arc_cx - fillet_r, arc_cy - fillet_r, arc_cx + fillet_r, arc_cy + fillet_r, 0, 90
+    )  # CCW East(0°) → North(90°)
+    # now at North tangent: (D[0]-fillet_r, D[1]) = (arc_cx, oy+ext_d)
+    p.lineTo(*G)  # main body bottom, going left
+    p.lineTo(*A)  # left edge, going up
     p.close()
     c.drawPath(p, fill=1, stroke=1)
 
+    # ── Extension boundary line (same style as plank lines) ──────────────
+    # Drawn AFTER fill so it's always on top.
+    plank_color = colors.HexColor("#8B6914")
+    c.setStrokeColor(plank_color)
+    c.setLineWidth(0.7)
+    c.setDash(4, 3)
+    c.line(G[0], G[1], ox + draw_w, G[1])
+    c.setDash()
+
     # ── Dimension lines ───────────────────────────────────────────────────
-    # Overall length (top, above shape)
-    draw_dimension_line(c, A[0], A[1], B[0], B[1], f"{TABLE_LENGTH} mm", side="top", offset=7*mm)
+    # Overall length (top)
+    draw_dimension_line(c, A[0], A[1], B[0], B[1], f"{TABLE_LENGTH} mm", side="top", offset=7 * mm)
+    # Left depth: G→A = 800mm (main body only)
+    draw_dimension_line(c, G[0], G[1], A[0], A[1], f"{TABLE_WIDTH} mm", side="left", offset=9 * mm)
+    # Right depth upper: B down to C_ext level at oy+ext_d = 800mm
+    C_step = (ox + draw_w, oy + ext_d)
+    draw_dimension_line(
+        c, B[0], B[1], C_step[0], C_step[1], f"{TABLE_WIDTH} mm", side="right", offset=9 * mm
+    )
+    # Right depth lower: ext_d = 200mm
+    draw_dimension_line(
+        c, C_step[0], C_step[1], C_ext[0], C_ext[1], f"{EXT_DEPTH} mm", side="right", offset=9 * mm
+    )
+    # Extension width (bottom, E→C_ext)
+    draw_dimension_line(
+        c, E_[0], E_[1], C_ext[0], E_[1], f"{EXT_LENGTH} mm", side="bottom", offset=7 * mm
+    )
 
-    # Main depth (left side, full height)
-    draw_dimension_line(c, F[0], F[1], A[0], A[1], f"{TABLE_WIDTH + EXT_DEPTH} mm", side="left", offset=9*mm)
-
-    # Main body depth only (right side, top portion)
-    draw_dimension_line(c, B[0], B[1], C[0], C[1], f"{TABLE_WIDTH} mm", side="right", offset=9*mm)
-
-    # Extension depth (right side, bottom portion)
-    draw_dimension_line(c, C[0], C[1], (ox + draw_w, oy)[0], (ox + draw_w, oy)[1],
-                        f"{EXT_DEPTH} mm", side="right", offset=9*mm)
-
-    # Extension width (bottom, ext portion only)
-    draw_dimension_line(c, D[0], D[1], C[0], D[1], f"{EXT_LENGTH} mm", side="bottom", offset=7*mm)
-
-    # Fillet label
+    # Fillet label — just below D, in the notch area
     c.setFont("Helvetica", 7)
     c.setFillColor(colors.HexColor("#555555"))
-    c.drawString(arc_cx + 2 * mm, arc_cy + 2 * mm, f"R {100} mm")
+    c.drawString(D[0] + 2 * mm, D[1] - fillet_r - 4 * mm, f"R {FILLET_RADIUS} mm")
 
-    # Thickness label (callout)
+    # ── Plank division lines ──────────────────────────────────────────────
+    # Main body: 4 planks × 200mm, measured from TOP of main body downward.
+    # Bottom of main body = oy + ext_d.  Top = oy + draw_h = oy + ext_d + main_d.
+    # Plank seams at ext_d + 200, ext_d + 400, ext_d + 600mm from bottom.
+    PLANK_W_MM = 200
+    N_PLANKS = TABLE_WIDTH // PLANK_W_MM  # = 4
+    plank_color = colors.HexColor("#8B6914")
+
+    c.setStrokeColor(plank_color)
+    c.setLineWidth(0.7)
+    c.setDash(4, 3)
+
+    for i in range(1, N_PLANKS):
+        # Lines go from bottom of main body (G[1]=oy+ext_d) upward in 200mm steps
+        py = G[1] + i * PLANK_W_MM * scale
+        c.line(ox, py, ox + draw_w, py)  # full width (all within main body ✓)
+
+    c.setDash()
+    c.setLineWidth(0.5)
+
+    # Plank labels: centred in each plank band, on left edge
+    c.setFont("Helvetica", 6.5)
+    c.setFillColor(plank_color)
+    for i in range(N_PLANKS):
+        # Band i goes from G[1] + i*200*scale to G[1] + (i+1)*200*scale
+        label_y = G[1] + i * PLANK_W_MM * scale + (PLANK_W_MM * scale / 2)
+        c.drawString(ox + 2 * mm, label_y - 2 * mm, f"{PLANK_W_MM} mm")
+
+    # Extension label (centred in extension rectangle)
+    c.setFont("Helvetica", 6.5)
+    c.setFillColor(colors.HexColor("#444444"))
+    ext_cx = E_[0] + ext_l / 2  # centre X of extension = D[0] + ext_l/2
+    ext_cy = oy + ext_d / 2  # centre Y of extension
+    c.drawCentredString(ext_cx, ext_cy + 2 * mm, "extension")
+    c.drawCentredString(ext_cx, ext_cy - 2 * mm, f"{EXT_LENGTH:.0f}×{EXT_DEPTH} mm")
+
+    # Material callout (centre-left of main body, well away from extension)
     c.setFont("Helvetica", 7)
     c.setFillColor(colors.HexColor("#222222"))
-    note_x = ox + draw_w / 2
-    note_y = oy + draw_h / 2
-    c.drawCentredString(note_x, note_y, f"Thickness: {TABLE_THICKNESS} mm")
-    c.drawCentredString(note_x, note_y - 4 * mm, "Material: 40 mm solid timber")
-    c.drawCentredString(note_x, note_y - 8 * mm, "or 40 mm engineered board")
-    c.drawCentredString(note_x, note_y - 12 * mm, "Qty: 1 off")
+    note_x = ox + (draw_w - ext_l) / 2
+    note_y = G[1] + main_d / 2
+    c.drawCentredString(note_x, note_y + 4 * mm, f"Thickness: {TABLE_THICKNESS} mm")
+    c.drawCentredString(note_x, note_y, "Steamed beech 52 mm")
+    c.drawCentredString(note_x, note_y - 4 * mm, "Edge-glued · 4 boards")
+    c.drawCentredString(note_x, note_y - 8 * mm, f"{N_PLANKS} × {PLANK_W_MM} × 2700 mm")
 
     # Panel border
     c.setStrokeColor(colors.HexColor("#aaaaaa"))
@@ -649,18 +1030,22 @@ def page_tabletop_drawing(c, page_num, total_pages, iso_rl):
 def _draw_iso_box(c, ox, oy, w, d, h, scale, label, dims_text):
     """Draw a simple isometric-projection box with reportlab, annotated."""
     # isometric offsets per unit
-    ix, iy = 0.5 * scale, 0.25 * scale   # x-axis dir
+    ix, iy = 0.5 * scale, 0.25 * scale  # x-axis dir
     jx, jy = -0.5 * scale, 0.25 * scale  # y-axis dir
-    kx, ky = 0, scale                     # z-axis (up)
+    _kx, ky = 0, scale  # z-axis (up)
 
     def pt(xi, yi, zi):
         return (ox + xi * ix + yi * jx, oy + xi * iy + yi * jy + zi * ky)
 
     # 8 corners
-    p000 = pt(0, 0, 0);   p100 = pt(w, 0, 0)
-    p010 = pt(0, d, 0);   p110 = pt(w, d, 0)
-    p001 = pt(0, 0, h);   p101 = pt(w, 0, h)
-    p011 = pt(0, d, h);   p111 = pt(w, d, h)
+    p000 = pt(0, 0, 0)
+    p100 = pt(w, 0, 0)
+    _p010 = pt(0, d, 0)
+    p110 = pt(w, d, 0)
+    p001 = pt(0, 0, h)
+    p101 = pt(w, 0, h)
+    p011 = pt(0, d, h)
+    p111 = pt(w, d, h)
 
     c.setFillColor(colors.HexColor("#c8a96e"))
     c.setStrokeColor(colors.HexColor("#5a3a1a"))
@@ -668,18 +1053,30 @@ def _draw_iso_box(c, ox, oy, w, d, h, scale, label, dims_text):
 
     # Top face
     tp = c.beginPath()
-    tp.moveTo(*p001); tp.lineTo(*p101); tp.lineTo(*p111); tp.lineTo(*p011); tp.close()
+    tp.moveTo(*p001)
+    tp.lineTo(*p101)
+    tp.lineTo(*p111)
+    tp.lineTo(*p011)
+    tp.close()
     c.drawPath(tp, fill=1, stroke=1)
 
     # Front face (y=0 plane)
     fp = c.beginPath()
-    fp.moveTo(*p000); fp.lineTo(*p100); fp.lineTo(*p101); fp.lineTo(*p001); fp.close()
+    fp.moveTo(*p000)
+    fp.lineTo(*p100)
+    fp.lineTo(*p101)
+    fp.lineTo(*p001)
+    fp.close()
     c.setFillColor(colors.HexColor("#b08040"))
     c.drawPath(fp, fill=1, stroke=1)
 
     # Right face (x=w plane)
     rp = c.beginPath()
-    rp.moveTo(*p100); rp.lineTo(*p110); rp.lineTo(*p111); rp.lineTo(*p101); rp.close()
+    rp.moveTo(*p100)
+    rp.lineTo(*p110)
+    rp.lineTo(*p111)
+    rp.lineTo(*p101)
+    rp.close()
     c.setFillColor(colors.HexColor("#9a6e30"))
     c.drawPath(rp, fill=1, stroke=1)
 
@@ -694,79 +1091,1332 @@ def _draw_iso_box(c, ox, oy, w, d, h, scale, label, dims_text):
         c.drawCentredString(ox, oy - 5 * mm - i * 4 * mm, txt)
 
 
+JOINERY_MAP = {
+    "Leg": "4× mortise 18×60mm, 32mm deep — per stretcher M&T joint",
+    "Wall beam": "6× Ø12mm clearance holes at 600mm centres (M10 lag screws)",
+    "Stretcher": "Both ends: tenon 18×60×30mm — glue + pocket screw",
+    "Apron": "Both ends: 2× pocket screw holes (Kreg jig, 50°)",
+    "Mounting rail": "Both ends: 2× pocket screw holes (Kreg jig, 50°)",
+    "Rail": "Both ends: 2× pocket screw holes (Kreg jig, 50°)",
+    "Slat": "Both ends: Ø3mm pilot hole, 2× 3.5×35mm screw per rail",
+    "Tabletop": "Figure-8 clips or pocket screws from below; no glue to frame",
+}
+
+
+def _draw_part_cell(c, bx, by, bw, bh, name, w_mm, d_mm, l_mm, qty, note=""):
+    """Draw one part cell: front face view + end cross-section + annotations.
+
+    bx,by: bottom-left corner of cell (pts)
+    bw,bh: cell width/height (pts)
+    w_mm : face width shown in front view (horizontal cross-section)
+    d_mm : depth shown in end section
+    l_mm : length of part
+    """
+    WOOD_FACE = colors.HexColor("#F0D090")
+    WOOD_END = colors.HexColor("#C89850")
+    GRAIN = colors.HexColor("#D8A860")
+
+    PAD = 3 * mm
+    TITLE_H = 10 * mm
+    ANN_BOT = 13 * mm  # space for bottom annotation (length / width) — increased for clearance
+    ANN_LEFT = 11 * mm  # space for left annotation (face height)
+    ANN_RIGHT = 10 * mm  # space for right annotation on end section
+    GAP = 5 * mm  # gap between front and end drawing
+    JOIN_H = 7 * mm  # height reserved at bottom for joinery callout
+
+    # ── Title bar ────────────────────────────────────────────────────────
+    c.setFont("Helvetica-Bold", 8)
+    c.setFillColor(colors.black)
+    c.drawString(bx + PAD, by + bh - TITLE_H + 3 * mm, name)
+    c.setFont("Helvetica", 7.5)
+    c.setFillColor(colors.HexColor("#333333"))
+    c.drawRightString(
+        bx + bw - PAD,
+        by + bh - TITLE_H + 3 * mm,
+        f"{w_mm} × {d_mm} mm  ·  L = {l_mm} mm  ·  ×{qty}",
+    )
+    c.setStrokeColor(colors.HexColor("#bbbbbb"))
+    c.setLineWidth(0.3)
+    c.line(bx, by + bh - TITLE_H, bx + bw, by + bh - TITLE_H)
+
+    # ── Drawing area bounds (raised to leave JOIN_H at bottom for joinery note)
+    da_x = bx + PAD + ANN_LEFT
+    da_y = by + JOIN_H + PAD + ANN_BOT
+    da_w = bw - PAD - ANN_LEFT - PAD  # full width minus left pad+annotation and right pad
+    da_h = bh - TITLE_H - PAD - ANN_BOT - PAD - JOIN_H
+
+    # ── End section (right side of cell) ─────────────────────────────────
+    # Scale so it fills the full draw height (minus annotation space)
+    end_scale = (da_h - ANN_BOT) / max(w_mm, d_mm)
+    end_w_pt = w_mm * end_scale
+    end_h_pt = d_mm * end_scale
+    end_x = da_x + da_w - ANN_RIGHT - end_w_pt
+    end_y = da_y + ANN_BOT + (da_h - ANN_BOT - end_h_pt) / 2
+
+    # ── Front face (left side, fills remaining width) ────────────────────
+    front_avail_w = end_x - GAP - da_x
+    front_avail_h = da_h - ANN_BOT
+
+    # Scale: proportional, but enforce minimum face height of 10mm
+    MIN_FACE_H = 10 * mm
+    scale = min(front_avail_w / l_mm, front_avail_h / w_mm)
+    if w_mm * scale < MIN_FACE_H:
+        scale = MIN_FACE_H / w_mm
+    front_h_pt = w_mm * scale
+    front_w_pt = min(l_mm * scale, front_avail_w)  # clamp + break if needed
+    foreshortened = l_mm * scale > front_avail_w
+
+    front_x = da_x
+    front_y = da_y + ANN_BOT + (front_avail_h - front_h_pt) / 2
+
+    # ── Draw front face ───────────────────────────────────────────────────
+    c.setFillColor(WOOD_FACE)
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.7)
+    c.rect(front_x, front_y, front_w_pt, front_h_pt, fill=1, stroke=1)
+
+    # Grain lines
+    c.setStrokeColor(GRAIN)
+    c.setLineWidth(0.25)
+    n_grain = max(3, int(front_w_pt / (5 * mm)))
+    for i in range(1, n_grain + 1):
+        gx = front_x + i * front_w_pt / (n_grain + 1)
+        c.line(gx, front_y + 1, gx, front_y + front_h_pt - 1)
+
+    # Break line (zig-zag) if foreshortened
+    if foreshortened:
+        bk_x = front_x + front_w_pt * 0.65
+        bk_w = 3 * mm
+        c.setFillColor(colors.white)
+        c.setStrokeColor(colors.white)
+        c.setLineWidth(3)
+        c.line(bk_x, front_y, bk_x, front_y + front_h_pt)
+        c.setStrokeColor(colors.black)
+        c.setLineWidth(0.7)
+        pts = [
+            (bk_x - bk_w / 2, front_y),
+            (bk_x + bk_w / 2, front_y + front_h_pt * 0.35),
+            (bk_x - bk_w / 2, front_y + front_h_pt * 0.65),
+            (bk_x + bk_w / 2, front_y + front_h_pt),
+        ]
+        path = c.beginPath()
+        path.moveTo(*pts[0])
+        for pt in pts[1:]:
+            path.lineTo(*pt)
+        c.drawPath(path)
+
+    # ── View label — FRONT VIEW (inside rect, near bottom) ───────────────
+    c.setFont("Helvetica", 5.5)
+    c.setFillColor(colors.HexColor("#888888"))
+    c.drawCentredString(front_x + front_w_pt / 2, front_y + 1.5 * mm, "FRONT VIEW")
+
+    # ── Draw end section ─────────────────────────────────────────────────
+    c.setFillColor(WOOD_END)
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.7)
+    c.rect(end_x, end_y, end_w_pt, end_h_pt, fill=1, stroke=1)
+    # Cross-hatch end grain
+    c.saveState()
+    p = c.beginPath()
+    p.rect(end_x, end_y, end_w_pt, end_h_pt)
+    c.clipPath(p, stroke=0)
+    c.setStrokeColor(colors.HexColor("#A07030"))
+    c.setLineWidth(0.2)
+    step = max(end_w_pt, end_h_pt) / 5
+    for i in range(-6, 10):
+        x0 = end_x + i * step
+        c.line(x0, end_y, x0 + end_h_pt + end_w_pt, end_y + end_h_pt + end_w_pt)
+        c.line(x0, end_y + end_h_pt, x0 + end_h_pt + end_w_pt, end_y)
+    c.restoreState()
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.7)
+    c.rect(end_x, end_y, end_w_pt, end_h_pt, fill=0, stroke=1)
+
+    # ── View label — CROSS-SECTION (inside rect, near bottom) ────────────
+    c.setFont("Helvetica", 5.5)
+    c.setFillColor(colors.HexColor("#888888"))
+    c.drawCentredString(end_x + end_w_pt / 2, end_y + 1.5 * mm, "CROSS-SECTION")
+
+    # ── Dimension annotations ─────────────────────────────────────────────
+    # Front: length at bottom
+    draw_dimension_line(
+        c,
+        front_x,
+        front_y,
+        front_x + front_w_pt,
+        front_y,
+        f"{l_mm} mm",
+        side="bottom",
+        offset=5 * mm,
+    )
+    # Front: face-width on left
+    draw_dimension_line(
+        c, front_x, front_y, front_x, front_y + front_h_pt, f"{w_mm} mm", side="left", offset=6 * mm
+    )
+    # End section: width at bottom
+    draw_dimension_line(
+        c, end_x, end_y, end_x + end_w_pt, end_y, f"{w_mm} mm", side="bottom", offset=5 * mm
+    )
+    # End section: depth on right
+    draw_dimension_line(
+        c,
+        end_x + end_w_pt,
+        end_y,
+        end_x + end_w_pt,
+        end_y + end_h_pt,
+        f"{d_mm} mm",
+        side="right",
+        offset=5 * mm,
+    )
+
+    # ── Joinery geometry on views ────────────────────────────────────────────
+    if "leg" in name.lower():
+        # Cross-section: draw two mortise rectangles (one on top face, one on left face)
+        mort_w = TENON_THICKNESS * end_scale
+        mort_h_vis = min(MORTISE_DEPTH * end_scale * 0.4, end_h_pt * 0.25)
+        # Top face mortise (centred horizontally)
+        mort_cx = end_x + end_w_pt / 2 - mort_w / 2
+        c.setFillColor(colors.HexColor("#3a1a00"))
+        c.setStrokeColor(colors.HexColor("#3a1a00"))
+        c.rect(mort_cx, end_y + end_h_pt - mort_h_vis, mort_w, mort_h_vis, fill=1, stroke=1)
+        # Left face mortise (centred vertically)
+        mort_cy = end_y + end_h_pt / 2 - mort_w / 2
+        c.rect(end_x, mort_cy, mort_h_vis, mort_w, fill=1, stroke=1)
+        # Front view: small label at stretcher height
+        if l_mm > 0 and front_h_pt > 0:
+            c.setFont("Helvetica", 5.5)
+            c.setFillColor(colors.HexColor("#003366"))
+            c.drawString(front_x + 2 * mm, front_y + front_h_pt * 0.5, f"M&T @ {STRETCHER_Z}mm h.")
+
+    elif "stretcher" in name.lower():
+        # Front face: draw tenon shoulder darkening at each end
+        tenon_h_pt = TENON_HEIGHT * scale
+        tenon_l_pt = min(TENON_LENGTH * scale, front_w_pt * 0.12)
+        shl_h_pt = (front_h_pt - tenon_h_pt) / 2
+        if shl_h_pt > 0 and tenon_l_pt > 0:
+            c.setFillColor(colors.HexColor("#C07830"))
+            c.setStrokeColor(colors.HexColor("#888444"))
+            c.setLineWidth(0.5)
+            # Left shoulder strips
+            c.rect(front_x, front_y, tenon_l_pt, shl_h_pt, fill=1, stroke=1)
+            c.rect(front_x, front_y + shl_h_pt + tenon_h_pt, tenon_l_pt, shl_h_pt, fill=1, stroke=1)
+            # Right shoulder strips
+            rx = front_x + front_w_pt - tenon_l_pt
+            c.rect(rx, front_y, tenon_l_pt, shl_h_pt, fill=1, stroke=1)
+            c.rect(rx, front_y + shl_h_pt + tenon_h_pt, tenon_l_pt, shl_h_pt, fill=1, stroke=1)
+        # Cross-section: dashed rectangle for tenon profile
+        if end_w_pt > 0 and end_h_pt > 0:
+            t_cx = end_x + (end_w_pt - TENON_THICKNESS * end_scale) / 2
+            t_cy = end_y + (end_h_pt - TENON_HEIGHT * end_scale) / 2
+            t_cw = TENON_THICKNESS * end_scale
+            t_ch = TENON_HEIGHT * end_scale
+            c.setStrokeColor(colors.HexColor("#003366"))
+            c.setFillColor(colors.HexColor("#A06020"))
+            c.setLineWidth(0.6)
+            c.setDash(3, 2)
+            c.rect(t_cx, t_cy, t_cw, t_ch, fill=0, stroke=1)
+            c.setDash()
+
+    elif "apron" in name.lower():
+        # Front face: angled lines at each end showing pocket screw holes
+        c.setStrokeColor(colors.HexColor("#003366"))
+        c.setLineWidth(0.7)
+        hole_offset = min(front_w_pt * 0.06, 6 * mm)
+        for ex in [
+            front_x + hole_offset,
+            front_x + hole_offset * 0.5,
+            front_x + front_w_pt - hole_offset,
+            front_x + front_w_pt - hole_offset * 0.5,
+        ]:
+            cy_h = front_y + front_h_pt * 0.5
+            c.line(ex - 1.5 * mm, cy_h + 2 * mm, ex + 1.5 * mm, cy_h - 2 * mm)
+
+    elif "wall beam" in name.lower():
+        # Front face: 6 × marks for lag screw holes
+        c.setStrokeColor(colors.HexColor("#003366"))
+        c.setLineWidth(0.7)
+        n_screws = 6
+        for i in range(n_screws):
+            hx = front_x + (i + 0.5) * front_w_pt / n_screws
+            hy = front_y + front_h_pt / 2
+            sz = 1.5 * mm
+            c.line(hx - sz, hy - sz, hx + sz, hy + sz)
+            c.line(hx + sz, hy - sz, hx - sz, hy + sz)
+
+    # ── Joinery callout ───────────────────────────────────────────────────
+    joinery_text = None
+    name_lower = name.lower()
+    for key, info in JOINERY_MAP.items():
+        if key.lower() in name_lower:
+            joinery_text = info
+            break
+
+    # Separator rule above joinery note
+    rule_y = by + JOIN_H + 0.5 * mm
+    c.setStrokeColor(colors.HexColor("#cccccc"))
+    c.setLineWidth(0.3)
+    c.line(bx + PAD, rule_y, bx + bw - PAD, rule_y)
+
+    # Joinery note text
+    if joinery_text:
+        c.setFillColor(colors.HexColor("#003366"))
+        c.setFont("Helvetica-Bold", 6.5)
+        label_w = c.stringWidth("JOINERY: ", "Helvetica-Bold", 6.5)
+        note_x = bx + PAD
+        note_y = by + 1.5 * mm
+        c.drawString(note_x, note_y, "JOINERY:")
+        c.setFont("Helvetica", 6.5)
+        c.drawString(note_x + label_w, note_y, joinery_text[:100])
+    elif note:
+        # Fallback: show note field if no joinery info
+        c.setFont("Helvetica-Oblique", 6)
+        c.setFillColor(colors.HexColor("#666666"))
+        c.drawString(bx + PAD, by + 1.5 * mm, note[:90])
+
+    # ── Cell border ───────────────────────────────────────────────────────
+    c.setStrokeColor(colors.HexColor("#999999"))
+    c.setLineWidth(0.4)
+    c.rect(bx, by, bw, bh)
+
+
 def page_timber_parts(c, page_num, total_pages):
-    """One page: annotated isometric drawings of all unique timber sections."""
+    """Two-view (front + cross-section) part drawings for all unique timber pieces."""
     content_y = MARGIN + TITLE_H + 4 * mm
     content_h = PAGE_H - content_y - MARGIN
 
     c.setFont("Helvetica-Bold", 11)
     c.setFillColor(colors.black)
-    c.drawString(MARGIN, content_y + content_h + 2 * mm, "TIMBER PARTS — INDIVIDUAL PART DRAWINGS")
+    c.drawString(MARGIN, content_y + content_h + 2 * mm, "PARTS — COMPONENT DRAWINGS")
 
+    # Collect unique structural parts from BOM (deduplicate same section+length)
     bom = get_bom()
-    timber_bom = [b for b in bom if b["material"] not in ("Steel", "Steel (hot-dip galv.)") and b["part"] != "Tabletop panel"]
+    skip_mats = {"Steel", "Steel (hot-dip galv.)"}
+    seen = {}
+    for item in bom:
+        if item["material"] in skip_mats:
+            continue
+        if "Tafelblad" in item["part"]:
+            continue
+        if item.get("width_mm") is None:
+            continue
+        key = (item["width_mm"], item.get("depth_mm", 0), item["length_mm"])
+        if key in seen:
+            seen[key]["qty"] = seen[key]["qty"] + item["qty"]
+            seen[key]["part"] += f" / {item['part'].split('—')[-1].strip()}"
+        else:
+            seen[key] = dict(item)
 
-    # Layout: 3 columns × 2 rows
-    n_cols = 3
+    parts = list(seen.values())
+
+    # Layout: 2 columns, enough rows
+    n_cols = 2
+    n_rows = math.ceil(len(parts) / n_cols)
     cell_w = DRAW_W / n_cols
-    cell_h = (content_h - 10 * mm) / 2
+    cell_h = (content_h - 6 * mm) / n_rows
 
-    iso_scale = 0.045  # mm → points at a sensible visual size, tweak if needed
-
-    for idx, item in enumerate(timber_bom[:6]):  # up to 6 parts in 3×2 grid
+    for idx, item in enumerate(parts):
         col = idx % n_cols
         row = idx // n_cols
-        cx = MARGIN + col * cell_w + cell_w / 2
-        cy = content_y + content_h - 10 * mm - row * cell_h - cell_h * 0.35
+        bx = MARGIN + col * cell_w
+        by = content_y + content_h - 6 * mm - (row + 1) * cell_h
 
-        w = item.get("width_mm") or 50
-        d = item.get("depth_mm") or 75
-        l = item.get("length_mm") or 900
-
-        # Clamp visual length so it doesn't overflow
-        vis_l = min(l, 500)
-
-        _draw_iso_box(
-            c, cx, cy,
-            w=w * iso_scale,
-            d=d * iso_scale,
-            h=vis_l * iso_scale,
-            scale=1.0,
-            label=item["part"].split("—")[0].strip(),
-            dims_text=[
-                f"Section: {w} × {d} mm",
-                f"Length: {l} mm",
-                f"Qty: {item['qty']}",
-                item.get("note", ""),
-            ],
+        _draw_part_cell(
+            c,
+            bx,
+            by,
+            cell_w,
+            cell_h,
+            name=item["part"].split("—")[0].strip(),
+            w_mm=item["width_mm"],
+            d_mm=item.get("depth_mm") or item["width_mm"],
+            l_mm=item["length_mm"],
+            qty=item["qty"],
+            note=item.get("note", ""),
         )
 
-        # Cell border
-        c.setLineWidth(0.2)
-        c.setStrokeColor(colors.HexColor("#dddddd"))
-        c.rect(MARGIN + col * cell_w, content_y + content_h - 10 * mm - (row + 1) * cell_h,
-               cell_w, cell_h)
-
-    draw_title_block(c, page_num, total_pages, "Timber Parts — Individual Drawings")
+    draw_title_block(c, page_num, total_pages, "Parts — Component Drawings")
     c.showPage()
+
+
+def page_joinery_detail(c, page_num, total_pages):
+    """Detail page: 4-panel joinery overview (Tenon / Mortise / Pocket screw / Assembly)."""
+    content_y = MARGIN + TITLE_H + 4 * mm
+    content_h = PAGE_H - content_y - MARGIN
+
+    c.setFont("Helvetica-Bold", 11)
+    c.setFillColor(colors.black)
+    c.drawString(
+        MARGIN,
+        content_y + content_h + 2 * mm,
+        "JOINERY DETAIL — M&T, POCKET SCREWS & ASSEMBLY POSITION",
+    )
+
+    SCALE = 1.7 * mm  # paper-pt per real-mm
+
+    # ── Derived sizes ────────────────────────────────────────────────────────
+    sw = STRETCHER_WIDTH * SCALE
+    sh = STRETCHER_HEIGHT * SCALE
+    tt = TENON_THICKNESS * SCALE
+    th = TENON_HEIGHT * SCALE
+    tl = TENON_LENGTH * SCALE
+    shl_w = (STRETCHER_WIDTH - TENON_THICKNESS) / 2 * SCALE
+    shl_h = (STRETCHER_HEIGHT - TENON_HEIGHT) / 2 * SCALE
+    lw = LEG_WIDTH * SCALE
+    lh = LEG_DEPTH * SCALE
+    mw = TENON_THICKNESS * SCALE
+    mh = TENON_HEIGHT * SCALE
+
+    # ── Notes strip at bottom ────────────────────────────────────────────────
+    notes_h = 28 * mm
+    notes_y = content_y + 2 * mm
+    notes = [
+        "M&T joints: stretchers only — 2 joints per stretcher × 2 stretchers = 4 total",
+        "Pocket screws: aprons and mounting rails — 2× per end",
+        "Tabletop: figure-8 clips from below (wood movement allowance)",
+        "See BOM for hardware quantities",
+    ]
+    c.setFont("Helvetica", 8)
+    c.setFillColor(colors.HexColor("#333333"))
+    for i, note in enumerate(notes):
+        c.drawString(MARGIN + 4 * mm, notes_y + (len(notes) - 1 - i) * 6 * mm, "\u2022 " + note)
+
+    # ── 2×2 panel grid ───────────────────────────────────────────────────────
+    panels_y = content_y + notes_h + 4 * mm
+    panels_h = content_h - notes_h - 4 * mm
+    panel_w = DRAW_W / 2
+    panel_h = panels_h / 2
+    PAD = 8 * mm
+    LABEL_H = 10 * mm  # reserved at bottom of each panel for title label
+
+    def panel_rect(col, row):
+        """Return (px, py, pw, ph) for panel at grid col/row (0-indexed from top-left)."""
+        px = MARGIN + col * panel_w
+        py = panels_y + (1 - row) * panel_h
+        return px, py, panel_w, panel_h
+
+    def draw_panel_border(px, py, pw, ph, label):
+        c.setLineWidth(0.5)
+        c.setStrokeColor(colors.HexColor("#aaaaaa"))
+        c.rect(px, py, pw, ph)
+        c.setFont("Helvetica-Bold", 8)
+        c.setFillColor(colors.HexColor("#222222"))
+        c.drawCentredString(px + pw / 2, py + 3 * mm, label)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Panel TOP-LEFT: Tenon detail
+    # ══════════════════════════════════════════════════════════════════════════
+    px, py, pw, ph = panel_rect(0, 0)
+    draw_total_w = sw + tl
+    draw_total_h = sh
+    inner_h = ph - LABEL_H - PAD
+    inner_w = pw - 2 * PAD - 20 * mm  # 20mm left for dimension lines
+    # Scale to fit
+    sc_t = min(inner_w / draw_total_w, inner_h / draw_total_h)
+    sw_s = sw * sc_t
+    sh_s = sh * sc_t
+    tt_s = tt * sc_t
+    th_s = th * sc_t
+    tl_s = tl * sc_t
+    shl_w_s = shl_w * sc_t
+    shl_h_s = shl_h * sc_t
+
+    sx = px + PAD + 14 * mm + (inner_w - draw_total_w * sc_t) / 2
+    sy = py + LABEL_H + PAD + (inner_h - sh_s) / 2
+
+    # Stretcher body
+    c.setFillColor(colors.HexColor("#d4b896"))
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(1.2)
+    c.rect(sx, sy, sw_s, sh_s, fill=1, stroke=1)
+
+    # Tenon interior
+    tenon_x = sx + shl_w_s
+    tenon_y = sy + shl_h_s
+    c.setFillColor(colors.HexColor("#b8925a"))
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(0.8)
+    c.rect(tenon_x, tenon_y, tt_s, th_s, fill=1, stroke=1)
+
+    # Tenon extension
+    c.setFillColor(colors.HexColor("#c8a070"))
+    c.setStrokeColor(colors.HexColor("#555555"))
+    c.setLineWidth(0.8)
+    c.rect(sx + sw_s, tenon_y, tl_s, th_s, fill=1, stroke=1)
+
+    # Shoulder lines (dashed)
+    c.setStrokeColor(colors.HexColor("#666666"))
+    c.setLineWidth(0.5)
+    c.setDash(4, 3)
+    c.line(sx, tenon_y, sx + sw_s, tenon_y)
+    c.line(sx, tenon_y + th_s, sx + sw_s, tenon_y + th_s)
+    c.line(tenon_x, sy, tenon_x, sy + sh_s)
+    c.line(tenon_x + tt_s, sy, tenon_x + tt_s, sy + sh_s)
+    c.setDash()
+
+    # Dimension lines
+    draw_dimension_line(
+        c, sx, sy, sx + sw_s, sy, f"{STRETCHER_WIDTH} mm", side="bottom", offset=8 * mm
+    )
+    draw_dimension_line(
+        c,
+        sx,
+        sy,
+        tenon_x,
+        sy,
+        f"{int((STRETCHER_WIDTH - TENON_THICKNESS) // 2)} mm",
+        side="bottom",
+        offset=16 * mm,
+    )
+    draw_dimension_line(
+        c,
+        tenon_x,
+        sy + sh_s,
+        tenon_x + tt_s,
+        sy + sh_s,
+        f"{TENON_THICKNESS} mm",
+        side="top",
+        offset=6 * mm,
+    )
+    draw_dimension_line(
+        c, sx, sy, sx, sy + sh_s, f"{STRETCHER_HEIGHT} mm", side="left", offset=10 * mm
+    )
+    draw_dimension_line(
+        c,
+        sx + sw_s + tl_s,
+        tenon_y,
+        sx + sw_s + tl_s,
+        tenon_y + th_s,
+        f"{TENON_HEIGHT} mm",
+        side="right",
+        offset=8 * mm,
+    )
+    draw_dimension_line(
+        c,
+        sx + sw_s,
+        tenon_y + th_s,
+        sx + sw_s + tl_s,
+        tenon_y + th_s,
+        f"{TENON_LENGTH} mm",
+        side="top",
+        offset=6 * mm,
+    )
+
+    draw_panel_border(px, py, pw, ph, "TENON (side view of end face, Y-Z plane)")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Panel TOP-RIGHT: Mortise detail
+    # ══════════════════════════════════════════════════════════════════════════
+    px, py, pw, ph = panel_rect(1, 0)
+    inner_h = ph - LABEL_H - PAD
+    inner_w = pw - 2 * PAD - 20 * mm
+    sc_m = min(inner_w / lw, inner_h / lh)
+    lw_s = lw * sc_m
+    lh_s = lh * sc_m
+    mw_s = mw * sc_m
+    mh_s = mh * sc_m
+
+    leg_x = px + PAD + 14 * mm + (inner_w - lw_s) / 2
+    leg_y = py + LABEL_H + PAD + (inner_h - lh_s) / 2 + 4 * mm
+
+    # Leg face
+    c.setFillColor(colors.HexColor("#d4b896"))
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(1.2)
+    c.rect(leg_x, leg_y, lw_s, lh_s, fill=1, stroke=1)
+
+    # Mortise (centred on face)
+    m_x = leg_x + (lw_s - mw_s) / 2
+    m_y = leg_y + (lh_s - mh_s) / 2
+
+    c.setFillColor(colors.HexColor("#4a2a0a"))
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(0.8)
+    c.rect(m_x, m_y, mw_s, mh_s, fill=1, stroke=1)
+
+    # Centre lines (dashed)
+    c.setStrokeColor(colors.HexColor("#888888"))
+    c.setLineWidth(0.4)
+    c.setDash(3, 3)
+    c.line(leg_x, leg_y + lh_s / 2, leg_x + lw_s, leg_y + lh_s / 2)
+    c.line(leg_x + lw_s / 2, leg_y, leg_x + lw_s / 2, leg_y + lh_s)
+    c.setDash()
+
+    # Dimension lines — leg width/depth and mortise size
+    draw_dimension_line(
+        c, leg_x, leg_y, leg_x + lw_s, leg_y, f"{LEG_WIDTH} mm", side="bottom", offset=8 * mm
+    )
+    draw_dimension_line(
+        c, leg_x, leg_y, leg_x, leg_y + lh_s, f"{LEG_DEPTH} mm", side="left", offset=8 * mm
+    )
+    draw_dimension_line(
+        c, m_x, leg_y, m_x + mw_s, leg_y, f"{TENON_THICKNESS} mm", side="bottom", offset=16 * mm
+    )
+    draw_dimension_line(
+        c,
+        leg_x + lw_s,
+        m_y,
+        leg_x + lw_s,
+        m_y + mh_s,
+        f"{TENON_HEIGHT} mm",
+        side="right",
+        offset=8 * mm,
+    )
+
+    # Extra: mortise centre height from floor
+    mort_ctr_y_pt = leg_y + lh_s / 2  # on the drawing, mortise is centred — label
+    c.setFont("Helvetica", 6.5)
+    c.setFillColor(colors.HexColor("#003366"))
+    c.drawString(
+        leg_x + lw_s + 2 * mm, mort_ctr_y_pt + 1 * mm, f"\u2190 ctr @ {STRETCHER_Z} mm from floor"
+    )
+
+    # Arrow/leader from text to centre line
+    c.setStrokeColor(colors.HexColor("#003366"))
+    c.setLineWidth(0.4)
+    c.line(leg_x + lw_s, mort_ctr_y_pt, leg_x + lw_s + 2 * mm, mort_ctr_y_pt)
+
+    # Mortise depth callout
+    c.setFont("Helvetica", 7)
+    c.setFillColor(colors.HexColor("#222222"))
+    depth_note_x = m_x + mw_s + 3 * mm
+    depth_note_y = m_y + mh_s / 2 - 2 * mm
+    c.drawString(depth_note_x, depth_note_y, f"Depth: {MORTISE_DEPTH} mm")
+    c.setLineWidth(0.4)
+    c.setStrokeColor(colors.HexColor("#555555"))
+    c.line(m_x + mw_s, m_y + mh_s / 2, depth_note_x - 1 * mm, depth_note_y + 2 * mm)
+
+    # "Centred on face" annotation
+    c.setFont("Helvetica-Oblique", 6.5)
+    c.setFillColor(colors.HexColor("#444444"))
+    c.drawCentredString(leg_x + lw_s / 2, leg_y - 5 * mm, "Mortise centred on leg face")
+
+    draw_panel_border(px, py, pw, ph, "MORTISE (front view of leg face, X-Z plane)")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Panel BOTTOM-LEFT: Pocket screw detail
+    # ══════════════════════════════════════════════════════════════════════════
+    px, py, pw, ph = panel_rect(0, 1)
+    PS_SCALE = 2.5 * mm  # 2.5 pt per mm
+    apr_w = APRON_THICKNESS * PS_SCALE  # apron end width (thickness)
+    apr_h = APRON_HEIGHT * PS_SCALE  # apron end height
+
+    inner_h = ph - LABEL_H - PAD
+    inner_w = pw - 2 * PAD
+
+    # Centre the rectangle in inner area
+    apr_x = px + PAD + (inner_w - apr_w) / 2
+    apr_y = py + LABEL_H + PAD + (inner_h - apr_h) / 2 + 5 * mm
+
+    # Apron end rectangle
+    c.setFillColor(colors.HexColor("#d4b896"))
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(1.2)
+    c.rect(apr_x, apr_y, apr_w, apr_h, fill=1, stroke=1)
+
+    # Two angled lines at ~50° from bottom indicating pocket screw holes
+    hole_len = apr_h * 0.55
+    for hx_off in [apr_w * 0.28, apr_w * 0.72]:
+        hx = apr_x + hx_off
+        hy_start = apr_y + apr_h * 0.12
+        # 50° from horizontal → slope = tan(50°) ≈ 1.19
+        import math as _math
+
+        dx = hole_len * _math.cos(_math.radians(50))
+        dy = hole_len * _math.sin(_math.radians(50))
+        c.setStrokeColor(colors.HexColor("#003366"))
+        c.setLineWidth(1.2)
+        c.line(hx, hy_start, hx + dx, hy_start + dy)
+        # Small circle at entry (hole mouth)
+        c.setFillColor(colors.HexColor("#003366"))
+        c.circle(hx, hy_start, 1.5 * mm, fill=1, stroke=0)
+
+    # Labels
+    c.setFont("Helvetica-Bold", 7)
+    c.setFillColor(colors.HexColor("#222222"))
+    c.drawCentredString(
+        apr_x + apr_w / 2,
+        apr_y + apr_h + 4 * mm,
+        "Apron end — 2\u00d7 pocket screws, 50\u00b0 (Kreg jig)",
+    )
+    c.setFont("Helvetica", 7)
+    c.setFillColor(colors.HexColor("#555555"))
+    c.drawCentredString(apr_x + apr_w / 2, apr_y - 5 * mm, "2\u00d7 50 mm pocket screws per end")
+
+    # Dimension: APRON_THICKNESS and APRON_HEIGHT
+    draw_dimension_line(
+        c, apr_x, apr_y, apr_x + apr_w, apr_y, f"{APRON_THICKNESS} mm", side="bottom", offset=8 * mm
+    )
+    draw_dimension_line(
+        c, apr_x, apr_y, apr_x, apr_y + apr_h, f"{APRON_HEIGHT} mm", side="left", offset=8 * mm
+    )
+
+    draw_panel_border(px, py, pw, ph, "POCKET SCREW DETAIL (apron end view)")
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # Panel BOTTOM-RIGHT: Assembly position diagram
+    # ══════════════════════════════════════════════════════════════════════════
+    px, py, pw, ph = panel_rect(1, 1)
+    inner_h = ph - LABEL_H - PAD * 2
+    inner_w = pw - PAD * 2
+
+    # Schematic scale
+    LEG_SCH_W = 8 * mm
+    LEG_SCH_H = 30 * mm
+    STR_SCH_W = inner_w - 2 * LEG_SCH_W - 8 * mm
+    STR_SCH_H = 5 * mm
+    APR_SCH_H = 4 * mm
+    ROW_GAP = 14 * mm  # gap between M&T row and pocket screw row
+
+    total_sch_h = LEG_SCH_H * 2 + ROW_GAP
+    sch_base_x = px + PAD + (inner_w - (2 * LEG_SCH_W + STR_SCH_W)) / 2
+    sch_base_y = py + LABEL_H + PAD + (inner_h - total_sch_h) / 2
+
+    # ── Row 1 (top): M&T joint — legs + stretcher ────────────────────────────
+    r1_y = sch_base_y + LEG_SCH_H + ROW_GAP
+    leg_l_x = sch_base_x
+    leg_r_x = sch_base_x + LEG_SCH_W + STR_SCH_W
+    str_x = sch_base_x + LEG_SCH_W
+    str_y = r1_y + (LEG_SCH_H - STR_SCH_H) / 2
+
+    # Left leg
+    c.setFillColor(colors.HexColor("#d4b896"))
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(0.8)
+    c.rect(leg_l_x, r1_y, LEG_SCH_W, LEG_SCH_H, fill=1, stroke=1)
+    # Right leg
+    c.rect(leg_r_x, r1_y, LEG_SCH_W, LEG_SCH_H, fill=1, stroke=1)
+    # Stretcher
+    c.setFillColor(colors.HexColor("#c8a070"))
+    c.rect(str_x, str_y, STR_SCH_W, STR_SCH_H, fill=1, stroke=1)
+
+    # Callout circles at both joints
+    for jx in [leg_l_x + LEG_SCH_W, leg_r_x]:
+        jy = str_y + STR_SCH_H / 2
+        c.setFillColor(colors.white)
+        c.setStrokeColor(colors.HexColor("#003366"))
+        c.setLineWidth(0.6)
+        c.circle(jx, jy, 4 * mm, fill=1, stroke=1)
+        c.setFont("Helvetica-Bold", 4.5)
+        c.setFillColor(colors.HexColor("#003366"))
+        c.drawCentredString(jx, jy - 1 * mm, "M&T")
+
+    # Label row 1
+    c.setFont("Helvetica-Bold", 7)
+    c.setFillColor(colors.HexColor("#222222"))
+    c.drawCentredString(
+        sch_base_x + LEG_SCH_W + STR_SCH_W / 2,
+        r1_y + LEG_SCH_H + 3 * mm,
+        "Stretcher — Mortise & Tenon joint",
+    )
+
+    # ── Row 2 (below): Pocket screw — legs + apron ───────────────────────────
+    r2_y = sch_base_y
+    apr_str_y = r2_y + (LEG_SCH_H - APR_SCH_H) / 2
+
+    # Left leg
+    c.setFillColor(colors.HexColor("#d4b896"))
+    c.setStrokeColor(colors.HexColor("#333333"))
+    c.setLineWidth(0.8)
+    c.rect(leg_l_x, r2_y, LEG_SCH_W, LEG_SCH_H, fill=1, stroke=1)
+    # Right leg
+    c.rect(leg_r_x, r2_y, LEG_SCH_W, LEG_SCH_H, fill=1, stroke=1)
+    # Apron
+    c.setFillColor(colors.HexColor("#b8925a"))
+    c.rect(str_x, apr_str_y, STR_SCH_W, APR_SCH_H, fill=1, stroke=1)
+
+    # Angled pocket-screw lines at joints
+    for jx in [str_x, str_x + STR_SCH_W]:
+        jy = apr_str_y + APR_SCH_H / 2
+        c.setStrokeColor(colors.HexColor("#003366"))
+        c.setLineWidth(0.8)
+        sign = 1 if jx == str_x else -1
+        c.line(jx, jy, jx + sign * 3 * mm, jy + 3 * mm)
+        c.line(jx, jy, jx + sign * 3 * mm, jy - 1 * mm)
+        c.setFont("Helvetica-Bold", 4.5)
+        c.setFillColor(colors.HexColor("#003366"))
+        c.drawCentredString(jx + sign * 5.5 * mm, jy, "PS")
+
+    # Label row 2
+    c.setFont("Helvetica-Bold", 7)
+    c.setFillColor(colors.HexColor("#222222"))
+    c.drawCentredString(
+        sch_base_x + LEG_SCH_W + STR_SCH_W / 2, r2_y - 4 * mm, "Apron/Rail — Pocket screw"
+    )
+
+    draw_panel_border(px, py, pw, ph, "ASSEMBLY POSITION — JOINT TYPES")
+
+    draw_title_block(c, page_num, total_pages, "Joinery Detail — M&T, Pocket Screws & Assembly")
+    c.showPage()
+
+
+# ── Render helpers (from absorbed modules) ───────────────────────────────────
+
+
+def render_iso_png(output_path: Path) -> None:
+    """Generate a colored isometric PNG using the VTK pipeline.
+
+    Requires cadquery.vis and VTK. If unavailable, prints a warning and
+    returns without error so the PDF pipeline continues.
+    """
+    if not _VTK_AVAILABLE:
+        print("WARNING: VTK not available — skipping colored ISO render.")
+        return
+
+    from cadquery.occ_impl.assembly import toVTKAssy
+    from vtkmodules.vtkIOImage import vtkPNGWriter
+    from vtkmodules.vtkRenderingCore import (
+        vtkLight,
+        vtkRenderer,
+        vtkRenderWindow,
+        vtkWindowToImageFilter,
+    )
+
+    print("Building workbench model for VTK render (with props)...")
+    from workbench.workbench_v2 import make_workbench as _make_workbench
+
+    assy = _make_workbench(include_props=True)
+
+    print("Building VTK scene...")
+    renderer = vtkRenderer()
+    renderer.SetBackground(1.0, 1.0, 1.0)
+
+    for act in toVTKAssy(assy):
+        prop = act.GetProperty()  # type: ignore[attr-defined]  # vtkActor at runtime
+        prop.SetAmbient(0.4)
+        prop.SetDiffuse(0.7)
+        renderer.AddActor(act)
+
+    # Top light — illuminates tabletop
+    top_light = vtkLight()
+    top_light.SetPosition(0, 0, 5000)
+    top_light.SetFocalPoint(0, 0, 0)
+    top_light.SetIntensity(0.6)
+    renderer.AddLight(top_light)
+
+    # Camera: frontal-right, low — shows front face, cart + wheels, tanks
+    cam = renderer.GetActiveCamera()
+    cam.SetPosition(3000, -5000, 1300)
+    cam.SetFocalPoint(-300, 0, 500)
+    cam.SetViewUp(0, 0, 1)
+    renderer.ResetCameraClippingRange()
+    cam.Zoom(1.6)
+
+    win = vtkRenderWindow()
+    win.SetSize(1800, 1000)
+    win.AddRenderer(renderer)
+    win.Render()
+
+    print("Writing PNG...")
+    w2i = vtkWindowToImageFilter()
+    w2i.SetInput(win)
+    w2i.SetInputBufferTypeToRGB()
+    w2i.ReadFrontBufferOff()
+    w2i.Update()
+
+    writer = vtkPNGWriter()
+    writer.SetFileName(str(output_path))
+    writer.SetInputConnection(w2i.GetOutputPort())
+    writer.Write()
+    print(f"Colored ISO PNG saved: {output_path}")
+
+
+def render_joinery_diagram(output_path: Path) -> None:
+    """Generate the joinery diagram PNG using matplotlib.
+
+    If matplotlib is unavailable, prints a warning and returns without error.
+    """
+    if not _MPL_AVAILABLE:
+        print("WARNING: matplotlib not available — skipping joinery diagram.")
+        return
+
+    print("Generating joinery diagram...")
+
+    import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Arc
+
+    # ── Colour palette ───────────────────────────────────────────────────────
+    C_WOOD = "#D4A96A"
+    C_EDGE = "#6B3A2A"
+    C_SCREW = "#888888"
+    C_DIM = "#333333"
+    C_ANNOT = "#1A1A6E"
+    C_BG = "#F8F5EF"
+    C_HOLE = "#B07040"
+
+    def dim_arrow(ax, x0, y0, x1, y1, label, offset=(0, 4), fontsize: float = 7, color=C_DIM):
+        ax.annotate(
+            "",
+            xy=(x1, y1),
+            xytext=(x0, y0),
+            arrowprops=dict(arrowstyle="<->", color=color, lw=0.8),
+        )
+        mx, my = (x0 + x1) / 2 + offset[0], (y0 + y1) / 2 + offset[1]
+        ax.text(
+            mx,
+            my,
+            label,
+            ha="center",
+            va="bottom",
+            fontsize=fontsize,
+            color=color,
+            fontfamily="monospace",
+        )
+
+    def draw_screw(ax, x, y, angle_deg, length=18, head_r=2.5):
+        import math as _math
+
+        rad = _math.radians(angle_deg)
+        dx, dy = _math.cos(rad) * length, _math.sin(rad) * length
+        ax.plot([x, x + dx], [y, y + dy], color=C_SCREW, lw=1.8, zorder=5)
+        head = mpatches.Circle((x, y), head_r, color=C_SCREW, zorder=6)
+        ax.add_patch(head)
+        for t in [0.3, 0.55, 0.75]:
+            tx, ty = x + dx * t, y + dy * t
+            perp = _math.radians(angle_deg + 90)
+            ax.plot(
+                [tx - _math.cos(perp) * 2.5, tx + _math.cos(perp) * 2.5],
+                [ty - _math.sin(perp) * 2.5, ty + _math.sin(perp) * 2.5],
+                color=C_SCREW,
+                lw=0.7,
+                zorder=5,
+            )
+
+    fig = plt.figure(figsize=(14, 9), facecolor=C_BG)
+    fig.suptitle(
+        "Werkbank v2 — Verbinding dwarsverbinding aan poot  (Pocket-schroef)",
+        fontsize=13,
+        fontweight="bold",
+        color=C_EDGE,
+        y=0.97,
+    )
+
+    ax1 = fig.add_axes((0.02, 0.08, 0.30, 0.82), facecolor=C_BG)
+    ax2 = fig.add_axes((0.36, 0.08, 0.30, 0.82), facecolor=C_BG)
+    ax3 = fig.add_axes((0.70, 0.08, 0.28, 0.82), facecolor=C_BG)
+
+    for ax in (ax1, ax2, ax3):
+        ax.set_aspect("equal")
+        ax.axis("off")
+
+    # ── Panel 1: Front elevation ─────────────────────────────────────────────
+    ax1.set_title("Aanzicht voor — Verbinding geassembleerd", fontsize=9, color=C_ANNOT, pad=8)
+
+    LEG_W, LEG_SHOWN = 80, 280
+    leg_x, leg_y = 30, 40
+    leg = mpatches.FancyBboxPatch(
+        (leg_x, leg_y),
+        LEG_W,
+        LEG_SHOWN,
+        boxstyle="square,pad=0",
+        linewidth=1.2,
+        edgecolor=C_EDGE,
+        facecolor=C_WOOD,
+    )
+    ax1.add_patch(leg)
+    for gy in range(leg_y + 20, leg_y + LEG_SHOWN, 25):
+        ax1.plot([leg_x + 8, leg_x + LEG_W - 8], [gy, gy + 4], color=C_EDGE, lw=0.4, alpha=0.35)
+
+    _STR_D, STR_H, STR_L = 52, 75, 180
+    str_x = leg_x + LEG_W
+    str_y = leg_y + LEG_SHOWN - 170
+    stretcher = mpatches.FancyBboxPatch(
+        (str_x, str_y),
+        STR_L,
+        STR_H,
+        boxstyle="square,pad=0",
+        linewidth=1.2,
+        edgecolor=C_EDGE,
+        facecolor=C_WOOD,
+    )
+    ax1.add_patch(stretcher)
+    for gx in range(str_x + 15, str_x + STR_L, 20):
+        ax1.plot([gx, gx + 5], [str_y + 10, str_y + STR_H - 10], color=C_EDGE, lw=0.4, alpha=0.35)
+
+    for sy_off in [18, 52]:
+        sc = mpatches.Circle((str_x + 22, str_y + sy_off), 4, color=C_SCREW, zorder=6, linewidth=1)
+        ax1.add_patch(sc)
+        ax1.plot(
+            str_x + 22,
+            str_y + sy_off,
+            "x",
+            color="white",
+            markersize=4,
+            markeredgewidth=1.2,
+            zorder=7,
+        )
+
+    dim_arrow(ax1, leg_x, leg_y - 18, leg_x + LEG_W, leg_y - 18, "80 mm", offset=(0, -5))
+    dim_arrow(
+        ax1, str_x + STR_L + 12, str_y, str_x + STR_L + 12, str_y + STR_H, "75 mm", offset=(4, 0)
+    )
+    ax1.text(
+        str_x + STR_L / 2,
+        str_y - 14,
+        "diepte 52 mm (zie doorsnede \u2192)",
+        ha="center",
+        fontsize=7,
+        color=C_ANNOT,
+        style="italic",
+    )
+    ax1.text(
+        leg_x + LEG_W / 2,
+        leg_y + LEG_SHOWN + 10,
+        "Poot\n80\u00d780 mm",
+        ha="center",
+        fontsize=8,
+        color=C_ANNOT,
+        fontweight="bold",
+    )
+    ax1.text(
+        str_x + STR_L / 2,
+        str_y + STR_H + 10,
+        "Dwarsverbinding\n52\u00d775 mm",
+        ha="center",
+        fontsize=8,
+        color=C_ANNOT,
+        fontweight="bold",
+    )
+    ax1.annotate(
+        "2\u00d7 pocket-schroef\n50 mm (\u00d8 4 mm)",
+        xy=(str_x + 22, str_y + 35),
+        xytext=(str_x + 80, str_y + 20),
+        fontsize=7.5,
+        color=C_SCREW,
+        arrowprops=dict(arrowstyle="->", color=C_SCREW, lw=0.8),
+    )
+    ax1.set_xlim(0, 310)
+    ax1.set_ylim(10, 380)
+
+    # ── Panel 2: Section view ────────────────────────────────────────────────
+    ax2.set_title("Doorsnede zijkant — Pocket-schroef detail", fontsize=9, color=C_ANNOT, pad=8)
+
+    lc_x, lc_y = 60, 130
+    ax2.add_patch(
+        mpatches.FancyBboxPatch(
+            (lc_x, lc_y),
+            80,
+            200,
+            boxstyle="square,pad=0",
+            linewidth=1.2,
+            edgecolor=C_EDGE,
+            facecolor=C_WOOD,
+        )
+    )
+    for gy in range(lc_y + 15, lc_y + 200, 22):
+        ax2.plot([lc_x + 6, lc_x + 74], [gy, gy + 3], color=C_EDGE, lw=0.4, alpha=0.35)
+
+    sc_x, sc_y = lc_x + 80, lc_y + 60
+    ax2.add_patch(
+        mpatches.FancyBboxPatch(
+            (sc_x, sc_y),
+            52,
+            75,
+            boxstyle="square,pad=0",
+            linewidth=1.2,
+            edgecolor=C_EDGE,
+            facecolor=C_WOOD,
+        )
+    )
+    for gx in range(sc_x + 6, sc_x + 52, 8):
+        ax2.plot([gx, gx + 3], [sc_y + 5, sc_y + 70], color=C_EDGE, lw=0.35, alpha=0.4)
+
+    import math as _math2
+
+    ANGLE = 15
+    rad = _math2.radians(ANGLE)
+    ph_entry_x = sc_x + 48
+    ph_entry_y = sc_y + 14
+    hole_len = 38
+    ph_exit_x = ph_entry_x - hole_len * _math2.cos(rad)
+    ph_exit_y = ph_entry_y + hole_len * _math2.sin(rad)
+
+    hole_w = 7
+    perp = _math2.radians(ANGLE + 90)
+    pts = [
+        (ph_entry_x + _math2.cos(perp) * hole_w / 2, ph_entry_y + _math2.sin(perp) * hole_w / 2),
+        (ph_exit_x + _math2.cos(perp) * hole_w / 2, ph_exit_y + _math2.sin(perp) * hole_w / 2),
+        (ph_exit_x - _math2.cos(perp) * hole_w / 2, ph_exit_y - _math2.sin(perp) * hole_w / 2),
+        (ph_entry_x - _math2.cos(perp) * hole_w / 2, ph_entry_y - _math2.sin(perp) * hole_w / 2),
+    ]
+    hole_poly = mpatches.Polygon(
+        pts, closed=True, facecolor=C_HOLE, edgecolor=C_EDGE, lw=0.8, zorder=4, alpha=0.7
+    )
+    ax2.add_patch(hole_poly)
+    draw_screw(ax2, ph_entry_x - 4, ph_entry_y + 2, 180 - ANGLE, length=36, head_r=4)
+
+    arc_r = 18
+    arc = Arc(
+        (ph_entry_x, ph_entry_y),
+        arc_r * 2,
+        arc_r * 2,
+        angle=0,
+        theta1=180 - ANGLE,
+        theta2=180,
+        color=C_DIM,
+        lw=0.8,
+    )
+    ax2.add_patch(arc)
+    ax2.text(
+        ph_entry_x - arc_r - 14,
+        ph_entry_y + 6,
+        f"{ANGLE}\u00b0",
+        fontsize=7,
+        color=C_DIM,
+        ha="center",
+    )
+
+    ax2.text(
+        lc_x + 40,
+        lc_y + 210,
+        "Poot 80\u00d780 mm\n(zijaanzicht)",
+        ha="center",
+        fontsize=8,
+        color=C_ANNOT,
+        fontweight="bold",
+    )
+    ax2.text(sc_x + 26, sc_y + 85, "Einde\ndwarsverb.", ha="center", fontsize=7.5, color=C_ANNOT)
+    ax2.annotate(
+        "Pocket-gat\n(Kreg-jig, 15\u00b0)",
+        xy=((ph_entry_x + ph_exit_x) / 2 + 4, (ph_entry_y + ph_exit_y) / 2),
+        xytext=(sc_x + 75, sc_y + 55),
+        fontsize=7.5,
+        color=C_ANNOT,
+        arrowprops=dict(arrowstyle="->", color=C_ANNOT, lw=0.8),
+    )
+    ax2.annotate(
+        "Lijmvlak\n(houtlijm D3)",
+        xy=(sc_x, sc_y + 37),
+        xytext=(sc_x - 55, sc_y + 75),
+        fontsize=7.5,
+        color="#2A6A2A",
+        arrowprops=dict(arrowstyle="->", color="#2A6A2A", lw=0.8),
+    )
+    ax2.plot([sc_x, sc_x], [sc_y, sc_y + 75], color="#2A6A2A", lw=2.5, alpha=0.4, zorder=3)
+    dim_arrow(ax2, sc_x + 55, sc_y, sc_x + 55, ph_entry_y, "14 mm", offset=(5, 0), fontsize=6.5)
+    ax2.set_xlim(10, 220)
+    ax2.set_ylim(90, 370)
+
+    # ── Panel 3: Isometric sketch ────────────────────────────────────────────
+    ax3.set_title("Isometrisch — Hoekverbinding", fontsize=9, color=C_ANNOT, pad=8)
+
+    def iso(x, y, z, sx=0.5, sy=0.4):
+        return x + z * sx, y + z * sy
+
+    lw2, ld2, lh2 = 80, 80, 240
+    lo = (40, 60)
+
+    def leg_box(ax, ox, oy, w, d, h, alpha=1.0):
+        ax.add_patch(
+            mpatches.Polygon(
+                [iso(ox, oy, 0), iso(ox + w, oy, 0), iso(ox + w, oy + h, 0), iso(ox, oy + h, 0)],
+                closed=True,
+                facecolor=C_WOOD,
+                edgecolor=C_EDGE,
+                lw=1.0,
+                alpha=alpha,
+            )
+        )
+        ax.add_patch(
+            mpatches.Polygon(
+                [
+                    iso(ox, oy + h, 0),
+                    iso(ox + w, oy + h, 0),
+                    iso(ox + w, oy + h, d),
+                    iso(ox, oy + h, d),
+                ],
+                closed=True,
+                facecolor="#C49050",
+                edgecolor=C_EDGE,
+                lw=1.0,
+                alpha=alpha,
+            )
+        )
+        ax.add_patch(
+            mpatches.Polygon(
+                [
+                    iso(ox + w, oy, 0),
+                    iso(ox + w, oy, d),
+                    iso(ox + w, oy + h, d),
+                    iso(ox + w, oy + h, 0),
+                ],
+                closed=True,
+                facecolor="#BA8040",
+                edgecolor=C_EDGE,
+                lw=1.0,
+                alpha=alpha,
+            )
+        )
+
+    leg_box(ax3, lo[0], lo[1], lw2, ld2, lh2)
+
+    sw2, sh2, sl2 = 52, 75, 180
+    sy_off2 = lh2 - sh2 - 20
+    str_ox2 = lo[0] + lw2
+    str_oy2 = lo[1] + sy_off2
+
+    ax3.add_patch(
+        mpatches.Polygon(
+            [
+                iso(str_ox2, str_oy2, 0),
+                iso(str_ox2, str_oy2, sw2),
+                iso(str_ox2, str_oy2 + sh2, sw2),
+                iso(str_ox2, str_oy2 + sh2, 0),
+            ],
+            closed=True,
+            facecolor="#BA8040",
+            edgecolor=C_EDGE,
+            lw=1.0,
+        )
+    )
+    ax3.add_patch(
+        mpatches.Polygon(
+            [
+                iso(str_ox2, str_oy2 + sh2, 0),
+                iso(str_ox2, str_oy2 + sh2, sw2),
+                iso(str_ox2 + sl2, str_oy2 + sh2, sw2),
+                iso(str_ox2 + sl2, str_oy2 + sh2, 0),
+            ],
+            closed=True,
+            facecolor="#C49050",
+            edgecolor=C_EDGE,
+            lw=1.0,
+        )
+    )
+    ax3.add_patch(
+        mpatches.Polygon(
+            [
+                iso(str_ox2, str_oy2, sw2),
+                iso(str_ox2 + sl2, str_oy2, sw2),
+                iso(str_ox2 + sl2, str_oy2 + sh2, sw2),
+                iso(str_ox2, str_oy2 + sh2, sw2),
+            ],
+            closed=True,
+            facecolor=C_WOOD,
+            edgecolor=C_EDGE,
+            lw=1.0,
+        )
+    )
+
+    for s_z in [12, 42]:
+        sx_, sy_ = iso(str_ox2, str_oy2 + s_z + 12, 0)
+        ax3.plot(sx_, sy_, "o", color=C_SCREW, markersize=5, zorder=7)
+
+    lx, ly = iso(lo[0] + lw2 / 2, lo[1] + lh2 + 8, ld2 / 2)
+    ax3.text(lx, ly, "Poot 80\u00d780", ha="center", fontsize=7.5, color=C_ANNOT, fontweight="bold")
+    slx, sly = iso(str_ox2 + sl2 / 2, str_oy2 - 14, sw2 / 2)
+    ax3.text(
+        slx,
+        sly,
+        "Dwarsverbinding 52\u00d775",
+        ha="center",
+        fontsize=7.5,
+        color=C_ANNOT,
+        fontweight="bold",
+    )
+    sc_iso = iso(str_ox2, str_oy2 + 24, 0)
+    ax3.annotate(
+        "Pocket-schroeven\n2\u00d7 per verbinding",
+        xy=sc_iso,
+        xytext=(sc_iso[0] - 55, sc_iso[1] - 30),
+        fontsize=7,
+        color=C_SCREW,
+        arrowprops=dict(arrowstyle="->", color=C_SCREW, lw=0.8),
+    )
+    ax3.set_xlim(-10, 310)
+    ax3.set_ylim(20, 380)
+
+    # ── Footer ───────────────────────────────────────────────────────────────
+    fig.text(
+        0.5,
+        0.02,
+        "Verbindingsmethode: pocket-schroef (Kreg-jig of equivalent) "
+        "\u00b7 2 schroeven per verbindingspunt "
+        "\u00b7 lijmvlak aanbrengen v\u00f3\u00f3r aanschroeven \u00b7 schroeflengte 50 mm",
+        ha="center",
+        fontsize=7.5,
+        color=C_DIM,
+        style="italic",
+    )
+
+    fig.savefig(str(output_path), dpi=160, bbox_inches="tight", facecolor=C_BG)
+    plt.close(fig)
+    print(f"Joinery diagram saved: {output_path}")
+
+
+def export_orthographic_svgs(output_dir: Path) -> None:
+    """Export orthographic SVG views of the workbench (top, front, side, iso).
+
+    Writes workbench_v2_{top,front,side_right,iso}.svg into output_dir.
+    Not called automatically from main() — invoke explicitly when needed.
+    """
+    from workbench.workbench_v2 import make_workbench as _make_workbench
+
+    def _rotated(shape: cq.Shape, axis: tuple, angle: float) -> cq.Shape:
+        return shape.rotate((0, 0, 0), axis, angle)
+
+    def _export_svg(shape: cq.Shape, name: str, width: int = 1600, height: int = 1000) -> None:
+        out = output_dir / f"workbench_v2_{name}.svg"
+        cq.exporters.export(
+            shape,
+            str(out),
+            opt={
+                "projectionDir": (0, 0, 1),
+                "width": width,
+                "height": height,
+                "showAxes": False,
+                "strokeColor": (40, 40, 40),
+                "hiddenColor": (200, 200, 200),
+                "showHidden": False,
+            },
+        )
+        print(f"Exported: {out.name}")
+
+    workbench = _make_workbench(include_props=False)
+    compound = workbench.toCompound()
+
+    _export_svg(compound, "top", width=1800, height=900)
+    front = _rotated(compound, (-1, 0, 0), 90)
+    _export_svg(front, "front", width=1800, height=900)
+    side = _rotated(front, (0, -1, 0), 90)
+    _export_svg(side, "side_right", width=900, height=900)
+    iso = _rotated(compound, (-1, 0, 0), 65)
+    iso = _rotated(iso, (0, 1, 0), -35)
+    _export_svg(iso, "iso", width=1800, height=1100)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
+
+def main(force_render: bool = False):
+    # ── Optional pre-renders ──────────────────────────────────────────────────
+    colored_png = OUTPUT_DIR / "workbench_iso_colored.png"
+    if not colored_png.exists() or force_render:
+        render_iso_png(colored_png)
+
+    joinery_png = OUTPUT_DIR / "joinery_stretcher_to_leg.png"
+    if not joinery_png.exists() or force_render:
+        render_joinery_diagram(joinery_png)
+
     print("Building workbench model...")
     workbench = make_workbench(include_props=False)
     compound = workbench.toCompound()
 
+    # Separate model with props for the title page iso view
+    workbench_props = make_workbench(include_props=True)
+    compound_props = workbench_props.toCompound()
+
     front_comp = rotated(compound, (-1, 0, 0), 90)
     side_comp = rotated(front_comp, (0, -1, 0), 90)
     iso_comp = iso_compound(compound)
+    iso_comp_props = iso_compound(compound_props)
 
     print("Exporting orthographic SVGs...")
     top_svg = export_temp_svg(compound, "top", 1800, 1000)
     front_svg = export_temp_svg(front_comp, "front", 1800, 1000)
     side_svg = export_temp_svg(side_comp, "side", 1000, 1000)
     iso_svg = export_temp_svg(iso_comp, "iso", 1800, 1000)
+    iso_props_svg = export_temp_svg(iso_comp_props, "iso_props", 1800, 1000)
 
     print("Exporting assembly stage SVGs...")
     stage_svgs = []
@@ -784,7 +2434,9 @@ def main():
     # Tabletop — render the actual L-shape (iso only; top view drawn directly with reportlab)
     tabletop_shape = make_tabletop()
     tabletop_iso_shape = iso_compound(tabletop_shape.val())
-    part_svgs["tabletop_iso"] = export_temp_svg(tabletop_iso_shape, "part_tabletop_iso", 2400, 1400, show_hidden=False)
+    part_svgs["tabletop_iso"] = export_temp_svg(
+        tabletop_iso_shape, "part_tabletop_iso", 2400, 1400, show_hidden=False
+    )
 
     # Generic timber parts — render a box for each unique dimension
     def make_box_part(w, d, l):
@@ -799,16 +2451,20 @@ def main():
     for name, w, d, l in timber_parts:
         part = make_box_part(w, d, l)
         iso = iso_compound(part)
-        part_svgs[f"timber_{name}"] = export_temp_svg(iso, f"part_{name}", 800, 600, show_hidden=False)
+        part_svgs[f"timber_{name}"] = export_temp_svg(
+            iso, f"part_{name}", 800, 600, show_hidden=False
+        )
 
-    total_pages = 1 + 1 + 1 + 1 + len(IKEA_STEPS) + 1 + 2  # title + BOM + elev + plan + ikea*6 + details + part drawings
+    total_pages = (
+        1 + 1 + 1 + 1 + len(IKEA_STEPS) + 1 + 3
+    )  # title + BOM + elev + plan + ikea*6 + details + tabletop + joinery + timber
 
     half_w = DRAW_W / 2 - 2 * mm
     content_y = MARGIN + TITLE_H + 4 * mm
     content_h = PAGE_H - content_y - MARGIN
 
     print("Converting SVGs to reportlab drawings...")
-    iso_rl = svg_to_rl(iso_svg, DRAW_W * 0.6, content_h)
+    iso_rl = svg_to_rl(iso_props_svg, DRAW_W * 0.6, content_h)  # title page: with props
     front_rl = svg_to_rl(front_svg, half_w - 4 * mm, content_h - 14 * mm)
     side_rl = svg_to_rl(side_svg, half_w - 4 * mm, content_h - 14 * mm)
     top_rl = svg_to_rl(top_svg, half_w - 4 * mm, content_h - 14 * mm)
@@ -817,26 +2473,36 @@ def main():
     c = canvas.Canvas(str(out_path), pagesize=landscape(A3))
 
     pn = 1
-    page_title(c, pn, total_pages, iso_rl); pn += 1
-    page_bom(c, pn, total_pages); pn += 1
-    page_elevations(c, pn, total_pages, front_rl, side_rl); pn += 1
-    page_plan_iso(c, pn, total_pages, top_rl, iso_rl); pn += 1
+    page_title(c, pn, total_pages, iso_rl)
+    pn += 1
+    page_bom(c, pn, total_pages)
+    pn += 1
+    page_elevations(c, pn, total_pages, front_rl, side_rl, front_svg, side_svg)
+    pn += 1
+    page_plan_iso(c, pn, total_pages, top_rl, iso_rl, top_svg)
+    pn += 1
 
     for i, step in enumerate(IKEA_STEPS):
         stage_rl = svg_to_rl(stage_svgs[i], DRAW_W * 0.62 - 4 * mm, content_h - 20 * mm)
-        page_ikea_step(c, pn, total_pages, step, stage_rl); pn += 1
+        page_ikea_step(c, pn, total_pages, step, stage_rl)
+        pn += 1
 
-    page_details(c, pn, total_pages); pn += 1
+    page_details(c, pn, total_pages)
+    pn += 1
 
     # Part drawings
     tabletop_iso_rl = svg_to_rl(part_svgs["tabletop_iso"], half_w - 4 * mm, content_h - 20 * mm)
-    page_tabletop_drawing(c, pn, total_pages, tabletop_iso_rl); pn += 1
-    page_timber_parts(c, pn, total_pages); pn += 1
+    page_tabletop_drawing(c, pn, total_pages, tabletop_iso_rl)
+    pn += 1
+    page_joinery_detail(c, pn, total_pages)
+    pn += 1
+    page_timber_parts(c, pn, total_pages)
+    pn += 1
 
     c.save()
     print(f"PDF saved: {out_path}")
 
-    for p in [top_svg, front_svg, side_svg, iso_svg] + stage_svgs:
+    for p in [top_svg, front_svg, side_svg, iso_svg, *stage_svgs]:
         p.unlink(missing_ok=True)
 
     for p in part_svgs.values():
@@ -844,4 +2510,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    _parser = argparse.ArgumentParser(description="Generate workbench construction PDF")
+    _parser.add_argument(
+        "--force-render",
+        action="store_true",
+        help="Re-generate colored PNG and joinery diagram even if they exist",
+    )
+    _args = _parser.parse_args()
+    main(force_render=_args.force_render)
